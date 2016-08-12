@@ -3,12 +3,18 @@
  */
 package com.example.mykotlin;
 
-import android.app.Activity
 import android.content.Intent
 import android.os.Bundle
 import kotlinx.android.synthetic.main.myactivity.*
 
-class MyActivity : Activity(){
+class MyActivity : BastActivity(){
+    override fun initView() {
+        throw UnsupportedOperationException("not implemented") //To change body of created functions use File | Settings | File Templates.
+    }
+
+    override fun findViewById() {
+        throw UnsupportedOperationException("not implemented") //To change body of created functions use File | Settings | File Templates.
+    }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -18,9 +24,8 @@ class MyActivity : Activity(){
         text1.text = i1.toString()
 
         button1.setOnClickListener {
-
             val i = Intent()
-            i.putExtra("text" , "knadadkaldal")
+            i.putExtra("text" , i1.toString())
             setResult(0x001 , i)
             finish()
         }

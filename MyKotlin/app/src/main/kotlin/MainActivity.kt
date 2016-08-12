@@ -1,35 +1,52 @@
 package com.example.mykotlin
 
-import android.app.Activity
+import android.content.Intent
 import android.os.Bundle
+import android.widget.Toast
 import kotlinx.android.synthetic.main.activity_main.*
+import java.util.*
 
-class MainActivity : Activity() {
+class MainActivity : BastActivity() {
+    override fun initView() {
+        throw UnsupportedOperationException("not implemented") //To change body of created functions use File | Settings | File Templates.
+    }
 
-    val webviewval = "https://pic2.zhimg.com/8a3ab4d0e9f254bbe6827c11296cbdfd_b.png"
+    override fun findViewById() {
+        throw UnsupportedOperationException("not implemented") //To change body of created functions use File | Settings | File Templates.
+    }
+
+    private var itemList = ArrayList<String>()
+    private var adapter: Mainadapter? = null
+    private var iString = arrayOf("基础","变量","属性","函数","类名","方法","UI","操作","继承","接口","重叠","修饰符","整形","字符型","数组","按钮","文字","编辑框","进度条")
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_main)
-//        tv.text = "Hello MyKotlin"
-//        tv.textSize = 50.0f
-//
-//        button.setOnClickListener {
-//            val i = Intent(this@MainActivity, MyActivity::class.java)
-//            i.putExtra("text", "阿奎罗大大大大开")
-//            startActivityForResult(i, 0x001)
-//        }
-//
-//    }
-//
-//    override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
-//        super.onActivityResult(requestCode, resultCode, data)
-//
-//        val textdata = data?.getStringExtra("text") as String
-//        if (requestCode == 0x001) {
-//            text.text = textdata
-//            return
-//        }
-        webview.loadUrl(webviewval)
+        itemList.getData()
+
+        adapter = Mainadapter(itemList , this)
+        list_item.adapter = adapter
+
+        list_item.setOnItemClickListener { adapterView, view, i, l ->
+            val i1 = Intent(this@MainActivity , MyActivity::class.java)
+            i1.putExtra("text" , "第"+i+"个"+itemList.get(i).toString())
+            startActivityForResult(i1 , 0x001)
+        }
+    }
+    override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
+        super.onActivityResult(requestCode, resultCode, data)
+
+        val textdata = data?.getStringExtra("text") as String
+        if (requestCode == 0x001) {
+            Toast.makeText(this@MainActivity,textdata,Toast.LENGTH_LONG).show();
+            return
+        }
+    }
+
+    fun ArrayList<String>.getData() {
+
+        for (iStringS in iString) {
+            this.add(iStringS)
+        }
     }
 }
 

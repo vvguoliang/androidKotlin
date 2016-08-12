@@ -1683,13 +1683,13 @@ containing a value of this type.
         public static final int text1=0x7f0c0051;
         public static final int text2=0x7f0c005b;
         public static final int textSpacerNoButtons=0x7f0c0034;
+        public static final int textadapter_item=0x7f0c0050;
         public static final int time=0x7f0c0059;
         public static final int title=0x7f0c002a;
         public static final int title_template=0x7f0c002f;
         public static final int topPanel=0x7f0c002e;
         public static final int up=0x7f0c0008;
         public static final int useLogo=0x7f0c0012;
-        public static final int webview=0x7f0c0050;
         public static final int withText=0x7f0c001f;
         public static final int wrap_content=0x7f0c0020;
     }
@@ -1727,22 +1727,24 @@ containing a value of this type.
         public static final int abc_search_view=0x7f040017;
         public static final int abc_select_dialog_material=0x7f040018;
         public static final int activity_main=0x7f040019;
-        public static final int myactivity=0x7f04001a;
-        public static final int notification_media_action=0x7f04001b;
-        public static final int notification_media_cancel_action=0x7f04001c;
-        public static final int notification_template_big_media=0x7f04001d;
-        public static final int notification_template_big_media_narrow=0x7f04001e;
-        public static final int notification_template_lines=0x7f04001f;
-        public static final int notification_template_media=0x7f040020;
-        public static final int notification_template_part_chronometer=0x7f040021;
-        public static final int notification_template_part_time=0x7f040022;
-        public static final int select_dialog_item_material=0x7f040023;
-        public static final int select_dialog_multichoice_material=0x7f040024;
-        public static final int select_dialog_singlechoice_material=0x7f040025;
-        public static final int support_simple_spinner_dropdown_item=0x7f040026;
+        public static final int mainadapter=0x7f04001a;
+        public static final int myactivity=0x7f04001b;
+        public static final int notification_media_action=0x7f04001c;
+        public static final int notification_media_cancel_action=0x7f04001d;
+        public static final int notification_template_big_media=0x7f04001e;
+        public static final int notification_template_big_media_narrow=0x7f04001f;
+        public static final int notification_template_lines=0x7f040020;
+        public static final int notification_template_media=0x7f040021;
+        public static final int notification_template_part_chronometer=0x7f040022;
+        public static final int notification_template_part_time=0x7f040023;
+        public static final int select_dialog_item_material=0x7f040024;
+        public static final int select_dialog_multichoice_material=0x7f040025;
+        public static final int select_dialog_singlechoice_material=0x7f040026;
+        public static final int support_simple_spinner_dropdown_item=0x7f040027;
     }
     public static final class mipmap {
-        public static final int ic_launcher=0x7f030000;
+        public static final int hellokotlin=0x7f030000;
+        public static final int ic_launcher=0x7f030001;
     }
     public static final class string {
         public static final int abc_action_bar_home_description=0x7f060000;
@@ -2076,6 +2078,9 @@ containing a value of this type.
         public static final int Widget_AppCompat_TextView_SpinnerItem=0x7f090131;
         public static final int Widget_AppCompat_Toolbar=0x7f090132;
         public static final int Widget_AppCompat_Toolbar_Button_Navigation=0x7f090133;
+        /**  背景透明 
+         */
+        public static final int customDialog=0x7f090134;
     }
     public static final class styleable {
         /** Attributes that can be used with a ActionBar.
