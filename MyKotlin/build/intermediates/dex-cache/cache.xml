@@ -2,60 +2,60 @@
 <items version="2" >
 
     <item
-        jar="/Users/vvguoliang/Library/Android/sdk/extras/android/m2repository/com/android/support/support-annotations/23.1.1/support-annotations-23.1.1.jar"
+        jar="/Users/vvguoliang/androidKotlin/MyKotlin/app/build/intermediates/incremental-runtime-classes/debug/instant-run.jar"
         jumboMode="true"
         revision="23.0.1"
-        sha1="8d680ba5a623724d1fb0e81c36a790f023a6cede">
-        <dex dex="/Users/vvguoliang/MyKotlin/app/build/intermediates/pre-dexed/debug/support-annotations-23.1.1_8232120a698f36077679691b7d09cfd669cbabbb.jar" />
+        sha1="3426bc875b8d4348bcfc04e2b1fc86f1a44fe36c">
+        <dex dex="/Users/vvguoliang/androidKotlin/MyKotlin/app/build/intermediates/pre-dexed/debug/instant-run_818a17ecc07e3c5c480f4dfc7b76421b1bfff764.jar" />
     </item>
     <item
-        jar="/Users/vvguoliang/MyKotlin/app/build/intermediates/exploded-aar/com.android.support/appcompat-v7/23.1.1/jars/classes.jar"
+        jar="/Users/vvguoliang/androidKotlin/MyKotlin/app/build/intermediates/exploded-aar/com.android.support/appcompat-v7/23.1.1/jars/classes.jar"
         jumboMode="true"
         revision="23.0.1"
         sha1="5c5699834e9722f1c288fea2de82725d078ba127">
-        <dex dex="/Users/vvguoliang/MyKotlin/app/build/intermediates/pre-dexed/debug/com.android.support-appcompat-v7-23.1.1_33dff26959bb3b005751f6ce57a6f37fc0b8b79d.jar" />
+        <dex dex="/Users/vvguoliang/androidKotlin/MyKotlin/app/build/intermediates/pre-dexed/debug/com.android.support-appcompat-v7-23.1.1_fe2610c915e9a9fa755423d098e6fdf1844d0755.jar" />
     </item>
     <item
-        jar="/Users/vvguoliang/.gradle/caches/modules-2/files-2.1/org.jetbrains.kotlin/kotlin-runtime/1.0.0-rc-1036/5d0e176a4c83cd1fa25c321f42802d2460753071/kotlin-runtime-1.0.0-rc-1036.jar"
-        jumboMode="true"
-        revision="23.0.1"
-        sha1="5d0e176a4c83cd1fa25c321f42802d2460753071">
-        <dex dex="/Users/vvguoliang/MyKotlin/app/build/intermediates/pre-dexed/debug/kotlin-runtime-1.0.0-rc-1036_2dbcc9133e1fd38eda793fdff3313a508675530b.jar" />
-    </item>
-    <item
-        jar="/Users/vvguoliang/MyKotlin/app/build/intermediates/exploded-aar/com.android.support/support-v4/23.1.1/jars/libs/internal_impl-23.1.1.jar"
-        jumboMode="true"
-        revision="23.0.1"
-        sha1="a4de9c81ae239414e1ed0f86441b02abaf29bca9">
-        <dex dex="/Users/vvguoliang/MyKotlin/app/build/intermediates/pre-dexed/debug/internal_impl-23.1.1_32a20852891cab3517d2ec158543789c664d3c89.jar" />
-    </item>
-    <item
-        jar="/Users/vvguoliang/MyKotlin/app/build/intermediates/exploded-aar/com.android.support/support-v4/23.1.1/jars/classes.jar"
+        jar="/Users/vvguoliang/androidKotlin/MyKotlin/app/build/intermediates/exploded-aar/com.android.support/support-v4/23.1.1/jars/classes.jar"
         jumboMode="true"
         revision="23.0.1"
         sha1="6cbc7773921fcfedbe55657578f0cbfe614778dc">
-        <dex dex="/Users/vvguoliang/MyKotlin/app/build/intermediates/pre-dexed/debug/com.android.support-support-v4-23.1.1_5656c28215d091dc319d2dbead6a4a12acbbc1ed.jar" />
+        <dex dex="/Users/vvguoliang/androidKotlin/MyKotlin/app/build/intermediates/pre-dexed/debug/com.android.support-support-v4-23.1.1_e2a0e3debf31750227dfb403dc06c577d71874b2.jar" />
     </item>
     <item
-        jar="/Users/vvguoliang/MyKotlin/app/build/intermediates/incremental-runtime-classes/debug/instant-run.jar"
+        jar="/Users/vvguoliang/androidKotlin/MyKotlin/app/build/intermediates/incremental-classes/debug/instant-run-bootstrap.jar"
         jumboMode="true"
         revision="23.0.1"
-        sha1="b9aa48f35ee8a7da6b0ae81db0e945ee6875002d">
-        <dex dex="/Users/vvguoliang/MyKotlin/app/build/intermediates/pre-dexed/debug/instant-run_bd6605c38c5d30fb4944007e881bded2de54632e.jar" />
-    </item>
-    <item
-        jar="/Users/vvguoliang/MyKotlin/app/build/intermediates/incremental-classes/debug/instant-run-bootstrap.jar"
-        jumboMode="true"
-        revision="23.0.1"
-        sha1="c8020d51c82a35b5fcdf82699badd06f6b826b3f">
-        <dex dex="/Users/vvguoliang/MyKotlin/app/build/intermediates/pre-dexed/debug/instant-run-bootstrap_d431dca772c00d0b32e31f2739549064f757e581.jar" />
+        sha1="b4458778b50294b6f6828b9219d90dda0f94f10d">
+        <dex dex="/Users/vvguoliang/androidKotlin/MyKotlin/app/build/intermediates/pre-dexed/debug/instant-run-bootstrap_5e8786f327582761ed1476a2d9cd86757b409102.jar" />
     </item>
     <item
         jar="/Users/vvguoliang/.gradle/caches/modules-2/files-2.1/org.jetbrains.kotlin/kotlin-stdlib/1.0.0-rc-1036/d676f54e166597168eb979d566b2362aed0aef4b/kotlin-stdlib-1.0.0-rc-1036.jar"
         jumboMode="true"
         revision="23.0.1"
         sha1="d676f54e166597168eb979d566b2362aed0aef4b">
-        <dex dex="/Users/vvguoliang/MyKotlin/app/build/intermediates/pre-dexed/debug/kotlin-stdlib-1.0.0-rc-1036_4c047b9d3087910a27027434ea8dcb0e6c272698.jar" />
+        <dex dex="/Users/vvguoliang/androidKotlin/MyKotlin/app/build/intermediates/pre-dexed/debug/kotlin-stdlib-1.0.0-rc-1036_4c047b9d3087910a27027434ea8dcb0e6c272698.jar" />
+    </item>
+    <item
+        jar="/Users/vvguoliang/Library/Android/sdk/extras/android/m2repository/com/android/support/support-annotations/23.1.1/support-annotations-23.1.1.jar"
+        jumboMode="true"
+        revision="23.0.1"
+        sha1="8d680ba5a623724d1fb0e81c36a790f023a6cede">
+        <dex dex="/Users/vvguoliang/androidKotlin/MyKotlin/app/build/intermediates/pre-dexed/debug/support-annotations-23.1.1_8232120a698f36077679691b7d09cfd669cbabbb.jar" />
+    </item>
+    <item
+        jar="/Users/vvguoliang/.gradle/caches/modules-2/files-2.1/org.jetbrains.kotlin/kotlin-runtime/1.0.0-rc-1036/5d0e176a4c83cd1fa25c321f42802d2460753071/kotlin-runtime-1.0.0-rc-1036.jar"
+        jumboMode="true"
+        revision="23.0.1"
+        sha1="5d0e176a4c83cd1fa25c321f42802d2460753071">
+        <dex dex="/Users/vvguoliang/androidKotlin/MyKotlin/app/build/intermediates/pre-dexed/debug/kotlin-runtime-1.0.0-rc-1036_2dbcc9133e1fd38eda793fdff3313a508675530b.jar" />
+    </item>
+    <item
+        jar="/Users/vvguoliang/androidKotlin/MyKotlin/app/build/intermediates/exploded-aar/com.android.support/support-v4/23.1.1/jars/libs/internal_impl-23.1.1.jar"
+        jumboMode="true"
+        revision="23.0.1"
+        sha1="a4de9c81ae239414e1ed0f86441b02abaf29bca9">
+        <dex dex="/Users/vvguoliang/androidKotlin/MyKotlin/app/build/intermediates/pre-dexed/debug/internal_impl-23.1.1_8e3c7715712f774d148edf19bb38cad625d76759.jar" />
     </item>
 
 </items>
