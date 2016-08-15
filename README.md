@@ -1,4 +1,4 @@
-# androidKotlin
+# 这是大神翻译出来的，希望有人能看到并且灵活利用
 # 《Kotlin for android developers》中文版翻译
 
 > 错别字、病句、翻译错误等问题可以提issues。请说明错误原因。
@@ -2638,6 +2638,2213 @@ assertEquals(listOf(7, 5, 3, 2), unsortedList.sortDescending())
 ```kotlin
 assertEquals(listOf(2, 5, 7, 3), unsortedList.sortDescendingBy { it % 3 })
 ```
+# 从数据库中保存或查询数据
+
+前面一个章节中我们讲了关于`SQLiteOpenHelper`的创建，但是我们需要在必要的时候有方法去保存我们的数据到数据库，或者从我们的数据库中查询数据。另外一个叫`ForecastDb`类就会做这件事。
+# 创建数据库model类
+
+但是首先，我们要去为数据库创建model类。你还记得我们之前所见的map委托的方式？我们要把这些属性直接映射到数据库中，反过来也一样。
+
+我们先来看下`CityForecast`类：
+
+```kotlin
+class CityForecast(val map: MutableMap<String, Any?>,
+                           val dailyForecast: List<DayForecast>) {
+    var _id: Long by map
+    var city: String by map
+    var country: String by map
+    
+    constructor(id: Long, city: String, country: String,
+                dailyForecast: List<DayForecast>)
+    : this(HashMap(), dailyForecast) {
+        this._id = id
+        this.city = city
+        this.country = country
+    }
+}
+```
+
+默认的构造函数会得到一个含有属性和对应的值的map，和一个dailyForecast。多亏了委托，这些值会根据key的名字会映射到相应的属性中去。如果我们希望映射的过程运行完美，那么属性的名字必须要和数据库中对应的名字一模一样。我们后面会讲原因。
+
+但是，第二个构造函数也是必要的。这是因为我们需要从domain映射到数据库类中，所以不能使用map，从属性中设置值也是方便的。我们传入一个空的map，但是又一次，多亏了委托，当我们设置值到属性的时候，它会自动增加所有的值到map中。用这种方式，我们就准备好map来保存到数据库中了。使用了这些有用的代码，我将会看见它运行起来就像魔法一样神奇。
+
+现在我们需要第二个类，DayForecast，它会是第二个表。它包括表中的每一列作为它的属性，它也有第二个构造函数。唯一不同之处就是不需要设置id，因为它将通过SQLite自增长。
+
+```kotlin
+class DayForecast(var map: MutableMap<String, Any?>) {
+	var _id: Long by map
+	var date: Long by map
+	var description: String by map
+	var high: Int by map
+	var low: Int by map
+	var iconUrl: String by map
+	var cityId: Long by map
+	
+	constructor(date: Long, description: String, high: Int, low: Int,
+				iconUrl: String, cityId: Long)
+	: this(HashMap()) {
+		this.date = date
+		this.description = description
+		this.high = high
+		this.low = low
+		this.iconUrl = iconUrl
+		this.cityId = cityId
+	}
+}
+```
+
+这些类将会帮助我们SQLite表与对象之间的互相映射。
+# 写入和查询数据库
+
+`SqliteOpenHelper`只是一个工具，是SQL世界和OOP之间的一个通道。我们要新建几个类来请求已经保存在数据库中的数据，和保存新的数据。被定义的类会使用`ForecastDbHelper`和`DataMapper`来转换数据库中的数据到`domain models`。我仍旧使用默认值的方式来实现简单的依赖注入：
+
+```kotlin
+class ForecastDb(
+    val forecastDbHelper: ForecastDbHelper = ForecastDbHelper.instance,
+    val dataMapper: DbDataMapper = DbDataMapper()) {
+    ...
+}
+```
+
+所有的函数使用前面章节讲到过的`use()`函数。lambda返回的值也会被作为这个函数的返回值。所以让我们定义一个使用`zip code`和`date`来查询一个`forecast`的函数：
+
+```kotlin
+fun requestForecastByZipCode(zipCode: Long, date: Long) = forecastDbHelper.use {
+	...
+}
+```
+
+这么没有什么解释的：我们使用`use`函数返回的结果作为这个函数返回的结果。
+
+#### 查询一个forecast
+
+第一个要做的查询就是每日的天气预报，因为我们需要这个列表来创建一个`city`对象。Anko提供了一个简单的请求构建器，所以我们来利用下这个有利条件：
+
+```kotlin
+val dailyRequest = "${DayForecastTable.CITY_ID} = ? " +
+    "AND ${DayForecastTable.DATE} >= ?"
+    
+val dailyForecast = select(DayForecastTable.NAME)
+        .whereSimple(dailyRequest, zipCode.toString(), date.toString())
+        .parseList { DayForecast(HashMap(it)) }
+```
+
+第一行，`dailyRequest`是查询语句中`where`的一部分。它是`whereSimple`函数需要的第一个参数，这与我们用一般的helper做的方式很相似。这里有另外一个简化的`where`函数，它需要一些tags和values来进行匹配。我不太喜欢这个方式，因为我觉得这个增加了代码的模版化，虽然这个对我们把values解析成String很有利。最后它看起来会是这样：
+
+```kotlin
+val dailyRequest = "${DayForecastTable.CITY_ID} = {id}" + "AND ${DayForecastTable.DATE} >= {date}"
+
+val dailyForecast = select(DayForecastTable.NAME)
+        .where(dailyRequest, "id" to zipCode, "date" to date)
+        .parseList { DayForecast(HashMap(it)) }
+```
+
+你可以选择你喜欢的一种方式。`select`函数是很简单的，它仅仅是需要一个被查询表的名字。`parse`函数的时候会有一些魔法在里面。在这个例子中我们假设请求结果是一个list，使用了`parseList`函数。它使用了`RowParser`或`RapRowParser`函数去把cursor转换成一个对象的集合。这两个不同之处就是`RowParser`是依赖列的顺序的，而`MapRowParser`是从map中拿到作为column的key名的。
+
+在它们之间有两个重载的冲突，所以我们不能直接使用简化的方式准确地创建需要的对象。但是没有什么是不能通过扩展函数来解决的。我创建了一个接收一个lambda函数返回一个`MapRowParser`的函数。解析器会调用这个lambda来创建这个对象：
+
+```kotlin
+fun <T : Any> SelectQueryBuilder.parseList(
+    parser: (Map<String, Any>) -> T): List<T> =
+        parseList(object : MapRowParser<T> {
+            override fun parseRow(columns: Map<String, Any>): T = parser(columns)
+})
+```
+
+这个函数可以帮助我们简单地去`parseList`查询的结果：
+
+```kotlin
+parseList { DayForecast(HashMap(it)) }
+```
+
+解析器接收的`immutable map`被我们转化成了一个`mutable map`（我们需要在`database model`中是可以修改的）通过使用相应的`HashMap`构造函数。在`DayForecast`中的构造函数中会使用到这个`HashMap`。
+
+所以，这个查询返回了一个`Cursor`，要理解这个场景的背后到底发生了什么。`parseList`中会迭代它，然后得到`Cursor`的每一行直到最后一个。对于每一行，它会创建一个包含这列的key和给对应的key赋值后的map。然后把这个map返回给这个解析器。
+
+如果查询没有任何结果，`parseList`会返回一个空的list。
+
+下一步查询城市也是一样的方法：
+
+```kotlin
+val city = select(CityForecastTable.NAME)
+        .whereSimple("${CityForecastTable.ID} = ?", zipCode.toString())
+        .parseOpt { CityForecast(HashMap(it), dailyForecast) }
+```
+
+不同之处是：我们使用的是`parseOpt`。这个函数返回一个可null的对象。结果可以使一个null或者单个的对象，这取决于请求是否能在数据库中查询到数据。这里有另外一个叫`parseSingle`的函数，本质上是一样的，但是它返回的事一个不可null的对象。所以如果没有在数据库中找到这一条数据，它会抛出一个异常。在我们的例子中，第一次查询一个城市的时候，肯定是不存在的，所以使用`parseOpt`会更安全。我又创建了一个好用的函数来阻止我们需要的对象的创建：
+
+```kotlin
+public fun <T : Any> SelectQueryBuilder.parseOpt(
+    parser: (Map<String, Any>) -> T): T? =
+        parseOpt(object : MapRowParser<T> {
+            override fun parseRow(columns: Map<String, Any>): T = parser(columns)
+        })
+```
+
+最后如果返回的city不是null，我们使用`dataMapper`把它转换成`domain object`再返回它。否则，我们直接返回null。你应该记得，lambda的最后一行表示返回值。所以这里将会返回一个`CityForecast?`类型的对象：
+
+```kotlin
+if (city != null) dataMapper.convertToDomain(city) else null
+```
+
+`DataMapper`函数很简单：
+
+```kotlin
+fun convertToDomain(forecast: CityForecast) = with(forecast) {
+    val daily = dailyForecast.map { convertDayToDomain(it) }
+    ForecastList(_id, city, country, daily)
+}
+
+private fun convertDayToDomain(dayForecast: DayForecast) = with(dayForecast) {
+	Forecast(date, description, high, low, iconUrl)
+}
+```
+
+最后完整的函数如下：
+
+```kotlin
+fun requestForecastByZipCode(zipCode: Long, date: Long) = forecastDbHelper.use {
+
+	val dailyRequest = "${DayForecastTable.CITY_ID} = ? AND " +
+	    "${DayForecastTable.DATE} >= ?"
+	val dailyForecast = select(DayForecastTable.NAME)
+	        .whereSimple(dailyRequest, zipCode.toString(), date.toString())
+	        .parseList { DayForecast(HashMap(it)) }
+	        
+	val city = select(CityForecastTable.NAME)
+	        .whereSimple("${CityForecastTable.ID} = ?", zipCode.toString())
+	        .parseOpt { CityForecast(HashMap(it), dailyForecast) }
+
+    if (city != null) dataMapper.convertToDomain(city) else null
+}
+```
+
+另外一个Anko中好玩的功能我们在这里展示，那就是你可以使用`classParser()`来替代我们用的`MapRowParser`，它是基于列名通过反射的方式去生成对象的。我喜欢另一种方法因为我不需要使用反射并且还有控制权进行转换操作，但是在有时候可能对你有用。
+
+#### 保存一个forecast
+
+`saveForecast`函数只是从数据库中清除数据，然后转换`domain` model为数据库model，然后插入每一天的`forecast`和`city forecast`。这个结构比之前的更简单：它通过`use`函数从`database helper`中返回数据。在这个例子中我们不需要返回值，所以它将返回`Unit`。
+
+```kotlin
+fun saveForecast(forecast: ForecastList) = forecastDbHelper.use {
+    ...
+}
+```
+
+首先，我们清空这两个表。Anko没有提供比较漂亮的方式来做这个，但这并不意味着我们不行。所以我们创建了一个`SQLiteDatabase`的扩展函数来让我们可以像SQL查询一样来执行它：
+
+```kotlin
+fun SQLiteDatabase.clear(tableName: String) {
+	execSQL("delete from $tableName")
+}
+```
+
+清空这两个表：
+
+```kotlin
+clear(CityForecastTable.NAME)
+clear(DayForecastTable.NAME)
+```
+
+现在，是时候去转换执行`insert`后返回的数据了。在这一点上你可能直到我是`with`函数的粉丝：
+
+```kotlin
+with(dataMapper.convertFromDomain(forecast)) {
+	...
+}
+```
+
+从`domain model`转换的方式也是很直接的：
+
+```kotlin
+fun convertFromDomain(forecast: ForecastList) = with(forecast) {
+    val daily = dailyForecast.map { convertDayFromDomain(id, it) }
+    CityForecast(id, city, country, daily)
+}
+
+private fun convertDayFromDomain(cityId: Long, forecast: Forecast) =
+    with(forecast) {
+        DayForecast(date, description, high, low, iconUrl, cityId)
+	}
+```
+
+在代码块，我们可以在不使用引用和变量的情况下使用`dailyForecast`和`map`，只是像我们在这个类内部一样就可以了。针对插入我们使用另外一个Anko函数，它需要一个表名和一个`vararg`修饰的`Pair<String, Any>`作为参数。这个函数会把`vararg`转换成Android SDK需要的`ContentValues`对象。所以我们的任务组成是把`map`转换成一个`vararg`数组。我们为`MutableMap`创建了一个扩展函数：
+
+```kotlin
+fun <K, V : Any> MutableMap<K, V?>.toVarargArray():
+    Array<out Pair<K, V>> =  map({ Pair(it.key, it.value!!) }).toTypedArray()
+```
+
+它是支持可null的值的（这是`map delegate`的条件），把它转换为非null值（`select`函数需要）的`Array`所组成的`Pairs`。不用担心就算你不完全理解这个函数，我很快就会讲到可空性。
+
+所以，这个新的函数我们可以这么使用：
+
+```kotlin
+insert(CityForecastTable.NAME, *map.toVarargArray())
+```
+
+它在`CityForecast`中插入了一个一行新的数据。在`toVarargArray`函数结果前面使用`*`表示这个array会被分解成为一个`vararg`参数。这个在Java中是自动处理的，但是我们需要在Kotlin中明确指明。
+
+每天的天气预报也是一样了：
+
+```kotlin
+dailyForecast.forEach { insert(DayForecastTable.NAME, *it.map.toVarargArray()) }
+```
+
+所以，通过`map`的使用，我们可以用很简单的方式把类转换为数据表，反之亦然。因为我们已经新建了扩展函数，我们可以在别的项目中使用，这个才是真正可贵的地方。
+
+这个函数的完整代码如下：
+
+```kotlin
+fun saveForecast(forecast: ForecastList) = forecastDbHelper.use {
+	clear(CityForecastTable.NAME)
+	clear(DayForecastTable.NAME)
+	
+	with(dataMapper.convertFromDomain(forecast)) {
+	    insert(CityForecastTable.NAME, *map.toVarargArray())
+	    dailyForecast forEach {
+	        insert(DayForecastTable.NAME, *it.map.toVarargArray())
+	    }
+	}
+}
+```
+
+在这一章中有很多代码被需要，所以你可以到代码库中查看检出。
+# Kotlin中的null安全
+
+如果你正在使用Java 7工作的话，null安全是Kotlin中最令人感兴趣的特性之一了。但是就如你在本书中看到的，它好像不存在一样，一直到上一章我们几乎都不需要去担心它。
+
+通过[我们自己创造的亿万美金的错误]对null的思考，我们有时候的确需要去定义一个变量包不包含一个值。在Java中尽管注解和IDE在这方面帮了我们很多，但是我们仍然可以这么做：
+
+```kotlin
+Forecast forecast = null;
+forecast.toString();
+```
+
+这个代码可以被完美地编译（你可能会从IDE上得到一个警告），然后正常地执行，但是显然它会抛一个`NullPointerException`。这个相当不安全的。而且按照我们的想法，我们应该去控制一切，随着代码的增长，我们会慢慢对某些null的控制。所以最终会得到很多的`NullPointerException`或者丢失很多null检查（可能两者混合）。
+
+[我们自己创造的亿万美金的错误]: https://en.wikipedia.org/wiki/Tony_Hoare
+
+# 可null类型怎么工作
+
+大部分现代语言使用某些方法去解决了这个问题，Kotlin的方法跟别的相似的语言比是相当另类和不同的。但是黄金准则还是一样：如果变量是可以是null，编译器强制我们去用某种方式去处理。
+
+指定一个变量是可null是通过__在类型的最后增加一个问号__。因为在Kotlin中一切都是对象（甚至是Java中原始数据类型），一切都是可null的。所以，当然我们可以有一个可null的integer：
+
+```kotlin
+val a: Int? = null
+```
+
+一个可nul类型，你在没有进行检查之前你是不能直接使用它。这个代码不能被编译：
+
+```kotlin
+val a: Int? = null
+a.toString()
+```
+
+前一行代码标记为可null，然后编译器就会知道它，所以在你null检查之前你不能去使用它。还有一个特性是当我们检查了一个对象的可null性，之后这个对象就会自动转型成不可null类型，这就是Kotlin编译器的智能转换：
+
+```kotlin
+vala:Int?=null
+...
+if(a!=null){
+	a.toString()
+}
+```
+
+在`if`中，`a`从`Int?`变成了`Int`，所以我们可以不需要再检查可null性而直接使用它。`if`代码之外，当然我们又得检查处理。这仅仅在变量当前不能被改变的时候才有效，因为否则这个value可能被另外的线程修改，这时前面的检查会返回false。`val`属性或者本地（`val or var`）变量。
+
+这听起来会让事情变得更多。难道我们不得不去编写大量代码去进行可null性的检查？当然不是，首先，因为大多数时候你不需要使用null类型。Null引用没有我们想象中的有用，当你想弄清楚一个变量是否可以为null时你就会发现这一点。但是Kotlin也有它自己的使处理更简洁的方案。举个例子，我们如下简化代码：
+
+```kotlin
+val a: Int? = null
+...
+a?.toString()
+```
+
+这里我们使用了安全访问操作符(`?`)。只有这个变量不是null的时候才会去执行前面的那行代码。否则，它不会做任何事情。并且我们甚至可以使用__Elvis operator__(`?:`)：
+
+```kotlin
+val a:Int? = null
+val myString = a?.toString() ?: ""
+```
+
+因为在Kotlin中`throw`和`return`都是表达式，他们可以用在__Elvis operator__操作符的右边：
+
+```kotlin
+val myString = a?.toString() ?: return false
+
+val myString = a?.toString() ?: throw IllegalStateException()
+```
+
+然后，我们可能会遇到这种情景，我们确定我们是在用一个非null变量，但是他的类型却是可null的。我们可以使用`!!`操作符来强制编译器执行可null类型时跳过限制检查：
+
+```kotlin
+val a: Int? = null
+a!!.toString()
+```
+
+上面的代码将会被编译，但是很显然会奔溃。所以我们要确保只能在特定的情况下使用。通常我们可以自己选择作为解决方案。如果一份代码满篇都是`!!`，那就有股代码没有被正确处理的气味了。
+# 可null性和Java库
+
+好了，前面的章节解释了使用Kotlin代码完美地工作。但是与普通的Java库和Android SDK会发生什么呢？在Java中，所有对象可以被定义为null。所以我们不得不处理大量潜在的在现实中不可能是null的null变量。这意味着我们的代码最后可能会有几百个`!!`操作符，这绝对不是一个好的主意。
+
+当我们去处理Android SDK时，你可能看见所有Java方法的参数被标记为单个的`!`。比如，Java中在一些获取对象的方法在Kotlin中显示返回`Any!`。这表示让开发者自己决定是否这个变量是否可null。
+
+很幸运，新版本的Android开始使用`@Nullable`和`@NonNull`注解来辨别参数是否可以是null或者否个函数是否可以返回null。当我们怀疑时，我们可以进入源码去检查是否会接收到一个null对象。我的猜想是在以后，编译器能够读取这些注解，然后强制（或者至少是建议）一个更好的方法。
+
+现在开始，当一个Jetbrains的`@Nullable`注解（这个与Android的注解不同）被注解在一个非null的变量时，就会获得一个警告。相对的没有发生在`@NotNull`注解上。
+
+所以我们来举个例子，如果我们创建了一个Java的测试类：
+
+```java
+import org.jetbrains.annotations.Nullable;
+public class NullTest {
+
+	@Nullable
+	public Object getObject(){
+		return "";
+	}
+}
+```
+
+然后在Kotlin中使用：
+
+```kotlin
+val test = NullTest()
+val myObject: Any = test.getObject()
+```
+
+我们会发现，在`getObject`函数上会显示一个警告。但是这只是从现在才开始的编译器检查，并且它还不认识Android的注解，所以我们可能不得不花更多的时间来等待一个更智能的方式。不管怎么样，使用源码注解的方式和一些Androd SDK的知识，我们也很难犯错误。
+
+比如重写`Activity`的`onCraete`函数，我们可以决定是否让`savedInstanceState`可null：
+
+```kotlin
+override fun onCreate(savedInstanceState: Bundle?) {
+}
+
+override fun onCreate(savedInstanceState: Bundle) {
+}
+```
+
+这两种方法都会被编译，但是第二种是错误的，因为一个Activity很可能接收到一个null的bundle。只要小心一点点就足够了。当你有疑问时，你可以就用可null的对象然后处理掉用可能的null。记住，如果你使用了 `!!`，可能是因为你确信对象不可能为null，如果是这样，请定义为非null。
+
+这个灵活性在Java库中真的很有必要，而且随着编译器的进化，我们将可能看到更好的交互（可能是基于注解的），但是现在来说这个机制已经足够灵活了。
+# 创建业务逻辑来访问数据
+
+在实现访问服务器和与本地数据库交互之后，是时候把事情整合起来了。逻辑步骤如下：
+
+- 从数据库获取数据
+- 检查是否存在对应星期的数据
+- 如果有，返回UI并且渲染
+- 如果没有，请求服务器获取数据
+- 结果被保存在数据库中并且返回UI渲染
+
+但是我们的`commands`不应该去处理所有这些逻辑。数据源应该是一个具体的实现，这样就可以被容易地修改，所以增加一些额外的代码，然后把`command`从数据访问中抽象出来听起来是个不错的方式。在我们的实现中，它会遍历整个list直到结果被找到。
+
+所以我们先来给接口定义一些我们实现`provider`需要使用到的数据源：
+
+```kotlin
+interface ForecastDataSource {
+    fun requestForecastByZipCode(zipCode: Long, date: Long): ForecastList?
+}
+```
+
+`provider`需要一个接收`zip code`和一个`date`，然后它应该根据那一天返回一周的天气预报。
+
+```kotlin
+class ForecastProvider(val sources: List<ForecastDataSource> =
+        ForecastProvider.SOURCES) {
+        
+	companion object {
+	    val DAY_IN_MILLIS = 1000 * 60 * 60 * 24
+	    val SOURCES = listOf(ForecastDb(), ForecastServer())
+	}
+    ...
+}
+```
+
+`forecast provider`接收一个数据源列表，通过构造函数传入（比如用于测试），但是我设置了source的默认值为被定义在`companion object`中的`SOURCES`List。我将使用数据库的数据源和服务端数据源。顺序是很重要的，因为它会根据顺序去遍历这个sources，然后一旦获取到有效的返回值就会停止查询。逻辑顺序是先在本地查询（本地数据库中），然后再通过API查询。
+
+所以主函数的代码如下：
+
+```kotlin
+fun requestByZipCode(zipCode: Long, days: Int): ForecastList
+            = sources.firstResult { requestSource(it, days, zipCode) }
+```
+
+它会得到第一个不是null的结果然后返回。当我在第18章中讲到的大量的函数操作符中搜索后，我没有找到完全符合我想要的。所以当我去查看Kotlin的源码时，我直接拷贝了`first`函数然后修改它们来达到我想要的目的：
+
+```kotlin
+inline fun <T, R : Any> Iterable<T>.firstResult(predicate: (T) -> R?) : R {
+	for (element in this){
+		val result = predicate(element)
+		if (result != null) return result
+	}
+	throw NoSuchElementException("No element matching predicate was found.")
+}
+```
+
+该函数接收一个断言函数，它接收一个`T`类型的对象然后返回一个`R?`类型的值。这表示`predicate`可以返回null类型，但是我们的`firstResult`不能返回null。这就是为什么返回`R`的原因。
+
+它怎么工作呢？它将遍历集合中的每一个元素然后执行这个断言函数。当这个断言函数的结果返回不是null时，这个结果就会被返回。
+
+如果我们可以允许sources返回null，那我们就可以使用`firstOrNull`函数来代替。不同之处就是最后一行的返回null和抛异常。但是我现在不在代码里面去处理这些细节了。
+
+在我们的例子中`T = ForecastDataSource`，`R = ForecastList`。但是记住在`ForecastDataSource`中指定的函数返回一个`ForecastList?`，也就是`R?`，所以一切都是匹配得这么完美。`requestSource`让前面的函数看起来更有可读性：
+
+```kotlin
+fun requestSource(source: ForecastDataSource, days: Int, zipCode: Long):
+        ForecastList? {
+    val res = source.requestForecastByZipCode(zipCode, todayTimeSpan())
+    return if (res != null && res.size() >= days) res else null
+}
+```
+
+如果结果不是null并且数量也参数匹配，那这个查询被执行且只会返回一个数据。否则，数据源没有足够的数据来返回一个成功的结果。
+
+函数`todayTimeSpan()`计算今天毫秒级的时间，并排除掉“时差”。其中一些数据源（我们例子中的数据库）可能会需要它。因为如果我们没有指定更多的信息，服务端默认就是今天，所以我们不需要设置它。
+
+```kotlin
+private fun todayTimeSpan() = System.currentTimeMillis() / DAY_IN_MILLIS * DAY_IN_MILLIS
+```
+
+这个类完整的代码如下：
+
+```kotlin
+class ForecastProvider(val sources: List<ForecastDataSource> =
+        ForecastProvider.SOURCES) {
+
+	companion object {
+        val DAY_IN_MILLIS = 1000 * 60 * 60 * 24;
+        val SOURCES = listOf(ForecastDb(), ForecastServer())
+    }
+
+	fun requestByZipCode(zipCode: Long, days: Int): ForecastList
+            = sources.firstResult { requestSource(it, days, zipCode) }
+
+	private fun requestSource(source: RepositorySource, days: Int,
+            zipCode: Long): ForecastList? {
+        val res = source.requestForecastByZipCode(zipCode, todayTimeSpan())
+        return if (res != null && res.size() >= days) res else null
+    }
+
+	private fun todayTimeSpan() = System.currentTimeMillis() /
+            DAY_IN_MILLIS * DAY_IN_MILLIS
+}
+```
+
+我们已经定义了一个`ForecastDb`。现在我们需要去实现`ForcastDataSource`：
+
+```kotlin
+class ForecastDb(val forecastDbHelper: ForecastDbHelper =
+        ForecastDbHelper.instance, val dataMapper: DbDataMapper = DbDataMapper())
+        : ForecastDataSource {
+        
+    override fun requestForecastByZipCode(zipCode: Long, date: Long) =
+            forecastDbHelper.use {
+            ...
+	}
+	...
+}
+```
+
+`ForecastServer`还没有还被实现，但是这是非常简单的。它在从服务端接收到数据之后就会使用`ForecastDb`去保存到数据库。用这种方式，我们就可以缓存这些数据到数据库中，提供给以后的查询。
+
+```kotlin
+class ForecastServer(val dataMapper: ServerDataMapper = ServerDataMapper(),
+        val forecastDb: ForecastDb = ForecastDb()) : ForecastDataSource {
+        
+    override fun requestForecastByZipCode(zipCode: Long, date: Long):
+            ForecastList? {
+        val result = ForecastByZipCodeRequest(zipCode).execute()
+        val converted = dataMapper.convertToDomain(zipCode, result)
+        forecastDb.saveForecast(converted)
+        return forecastDb.requestForecastByZipCode(zipCode, date)
+	}
+}
+```
+
+它也是使用了之前我们创建的`data mapper`，最然我们修改一些函数的名字来让它更加与我们之前用在`database model`的mapper更相似。你可以查看`provider`来查看细节。
+
+被重写的方法用来请求服务器，转换结果到`domain objects`并保存它们到数据库。它最后查询数据库返回数据，这是因为我们需要使用到插入到数据库中的字增长id。
+
+这就是`provider`被实现的最后的一步了。现在我们需要开始使用它。`ForecastCommand`不会再直接与服务端交互，也不会转换数据到`domain model`。
+
+```kotlin
+RequestForecastCommand(val zipCode: Long,
+        val forecastProvider: ForecastProvider = ForecastProvider()) :
+        Command<ForecastList> {
+        
+	companion object {
+		val DAYS = 7
+	}
+	
+	override fun execute(): ForecastList {
+		return forecastProvider.requestByZipCode(zipCode, DAYS)
+	}
+}
+```
+
+其它修改的地方包括重命名和包的结构调整。在[Kotlin for Android Developers repository]查看相应的提交。
+
+[Kotlin for Android Developers repository]: https://github.com/antoniolg/Kotlin-for-Android-Developers
+# Flow control和ranges
+
+我在我们的代码中使用了一些条件表达式，但是现在是时候去更深地去解释它们了。我们通常都在使用过程式编程语言的时候很少地去使用代码流控制的机制去编写（有些过程式编程语言中几乎已消失），但是它们还是很有用的。这也是一个新的强大的想法让解决一些特定的情况下的问题变得更容易。
+# If表达式
+
+在Kotlin中一切都是表达式，也就是说一切都返回一个值。如果`if`条件不含有一个exception，那我们可以像我们平时那样使用它：
+
+```kotlin
+if(x>0){
+	toast("x is greater than 0")
+}else if(x==0){ 
+	toast("x equals 0")
+}else{
+	toast("x is smaller than 0")
+}
+```
+
+我们也可以把结果赋值给一个变量。我们在我们的代码中使用了很多次：
+
+```kotlin
+val res = if (x != null && x.size() >= days) x else null
+```
+
+这也说明我也不需要想Java那种有一个三元操作符，因为我们可以使用它来简单实现：
+
+```kotlin
+val z = if (condition) x else y
+```
+
+所以`if`表达式总是返回一个value。如果一个分支返回了Unit，那整个表达式也将返回Unit，它是可以被忽略的，这种情况下它的用法也就跟一般Java中的`if`条件一样了。
+# When表达式
+
+`when`表达式与Java中的`switch/case`类似，但是要强大得多。这个表达式会去试图匹配所有可能的分支直到找到满意的一项。然后它会运行右边的表达式。与Java的`switch/case`不同之处是参数可以是任何类型，并且分支也可以是一个条件。
+
+对于默认的选项，我们可以增加一个`else`分支，它会在前面没有任何条件匹配时再执行。条件匹配成功后执行的代码也可以是代码块：
+
+```kotlin
+when (x){
+	1 -> print("x == 1") 
+	2 -> print("x == 2") 
+	else -> {
+		print("I'm a block")
+		print("x is neither 1 nor 2")
+    }
+}
+```
+
+因为它是一个表达式，它也可以返回一个值。我们需要考虑什么时候作为一个表达式使用，它必须要覆盖所有分支的可能性或者实现`else`分支。否则它不会被编译成功：
+
+```kotlin
+val result = when (x) {
+    0, 1 -> "binary"
+	else -> "error"
+}
+```
+
+如你所见，条件可以是一系列被逗号分割的值。但是它可以更多的匹配方式。比如，我们可以检测参数类型并进行判断：
+
+```kotlin
+when(view) {
+    is TextView -> view.setText("I'm a TextView")
+    is EditText -> toast("EditText value: ${view.getText()}")
+    is ViewGroup -> toast("Number of children: ${view.getChildCount()} ")
+    else -> view.visibility = View.GONE
+}
+```
+
+再条件右边的代码中，参数会被自动转型，所以你不需要去明确地做类型转换。
+
+它还让检测参数否在一个数组范围甚至是集合范围成为可能（我会在这章节的后面讲这个）：
+
+```kotlin
+val cost = when(x) {
+	in 1..10 -> "cheap"
+	in 10..100 -> "regular"
+	in 100..1000 -> "expensive"
+	in specialValues -> "special value!"
+	else -> "not rated"
+}
+```
+
+或者你甚至可以从对参数做需要的几乎疯狂的检查摆脱出来。它可以使用简单的`if/else`链替代：
+
+```kotlin
+valres=when{
+	x in 1..10 -> "cheap"
+	s.contains("hello") -> "it's a welcome!"
+	v is ViewGroup -> "child count: ${v.getChildCount()}"
+	else -> ""
+}
+```
+# For循环
+
+虽然你在使用了collections的函数操作符之后不会再过多地使用for循环，但是for循环再一些情况下仍然是很有用的。提供一个迭代器它可以作用在任何东西上面：
+
+```kotlin
+for (item in collection) {
+	print(item)
+}
+```
+
+如果你需要更多使用index的典型的迭代，我们也可以使用`ranges`（反正它通常是更加智能的解决方案）：
+
+```kotlin
+for (index in 0..viewGroup.getChildCount() - 1) {
+    val view = viewGroup.getChildAt(index)
+    view.visibility = View.VISIBLE
+}
+```
+
+在我们迭代一个array或者list，一系列的index可以用来获取到指定的对象，所以上面的方式不是必要的：
+
+```kotlin
+for (i in array.indices)
+	print(array[i])
+```
+# While和do/while循环
+
+你也可以使用`while`循环，尽管它们两个都不是特别常用的。它们通常可以更简单、视觉上更容易理解的方式去解决一个问题，两个例子：
+
+```kotlin
+while(x > 0){ 
+	x--
+}
+
+do{
+	val y = retrieveData()
+} while (y != null) // y在这里是可见的!
+```
+# Ranges
+
+很难解释`control flow`，如果不去讲讲`ranges`的话。但是它们的范围要宽得多。`Range`表达式使用一个`..`操作符，它是被定义实现了一个`RangTo`方法。
+
+`Ranges`帮助我们使用很多富有创造性的方式去简化我们的代码。比如我们可以把它：
+
+```kotlin
+if(i >= 0 && i <= 10) 
+	println(i)
+```
+
+转化成：
+
+```kotlin
+if (i in 0..10)
+    println(i)
+```
+
+`Range`被定义为可以被比较的任意类型，但是对于数字类型，比较器会通过转换它为简单的类似Java代码来避免额外开销的方式来优化它。数字类型的`ranges`也可以被迭代，编译器会转换它们为与Java中使用index的for循环的相同字节码的方式来进行优化：
+
+```kotlin
+for (i in 0..10)
+    println(i)
+```
+
+`Ranges`默认会自增长，所以如果像以下的代码：
+
+```kotlin
+for (i in 10..0)
+    println(i)
+```
+
+它就不会做任何事情。但是你可以使用`downTo`函数：
+
+```kotlin
+for(i in 10 downTo 0)
+	println(i)
+```
+
+我们可以在`range`中使用`step`来定义一个从1到一个值的不同的空隙：
+
+```kotlin
+for (i in 1..4 step 2) println(i)
+
+for (i in 4 downTo 1 step 2) println(i)
+```
+
+如果你想去创建一个open range（不包含最后一项，译者注：类似数学中的开区间），你可以使用`until`函数：
+
+```kotlin
+for (i in 0 until 4) println(i)
+```
+
+这一行会打印从0到3，但是会跳过最后一个值。这也就是说`0 until 4 == 0..3`。在一个list中迭代时，使用`(i in 0 until list.size)`比`(i in 0..list.size - 1)`更加容易理解。
+
+就如之前所提到的，使用`ranges`确实有富有创造性的方式。比如，一个简单的方式去从一个`ViewGroup`中得到一个Views列表可以这么做：
+
+```kotlin
+val views = (0..viewGroup.childCount - 1).map { viewGroup.getChildAt(it) }
+```
+
+混合使用`ranges`和`函数操作符`可以避免我们使用明确地循环去迭代一个集合，还有明确地去创建一个我们用来添加views的list。所有的事情都在一行代码中做好了。
+
+如果你想知道更多`ranges`的实现方式和更多的范例和游泳的信息，你可以进入[Kotlin reference]
+
+[Kotlin reference]:  https://kotlinlang.org/docs/reference/ranges.html
+# 创建一个详情界面
+
+当我们在主屏幕上点击了一项，我们希望跳转到一个详情界面并且可以看到一些关于那天天气预报的额外信息。我们当前点击了一项之后只是显示了一个toast，但是现在是时候去修改它了。
+# 准备请求
+
+因为我们需要知道哪一个item我们要在详情界面中显示出来，所以逻辑告诉我们需要发送一个天气预报的`id`到详情界面。所以`domain model`需要一个新的`id`属性：
+
+```kotlin
+data class Forecast(val id: Long, val date: Long, val description: String,
+    val high: Int, val low: Int, val iconUrl: String)
+```
+
+`ForecastProvider`也需要一个新的函数，它返回通过`id`请求后的结果。`DetailActivity`将需要通过接收到的`id`来执行请求获取天气预报数据。因为所有的请求都会迭代所有的数据源并且返回第一个非null的结果，我们可以抽取并定义一个新的函数：
+
+```kotlin
+private fun <T : Any> requestToSources(f: (ForecastDataSource) -> T?): T
+        = sources.firstResult { f(it) }
+```
+
+这个函数使用一个非null类型作为范型。它会接收一个函数，并返回一个可null的对象。其中这个接收的函数接收一个`ForecastDataSource`，并返回一个可null范型的对象。我们可以重写上一个请求并如下写一个新的：
+
+```kotlin
+fun requestByZipCode(zipCode: Long, days: Int): ForecastList = requestToSources {
+	val res = it.requestForecastByZipCode(zipCode, todayTimeSpan())
+	if (res != null && res.size() >= days) res else null
+}
+
+fun requestForecast(id: Long): Forecast = requestToSources {
+	it.requestDayForecast(id)
+}
+```
+
+现在数据源需要去实现一个新的函数：
+
+```kotlin
+fun requestDayForecast(id: Long): Forecast?
+```
+
+`ForcastDb`将总是会拿到所需的在上一次请求被缓存的值，所以我们可以通过这种方式去获取它：
+
+```kotlin
+override fun requestDayForecast(id: Long): Forecast? = forecastDbHelper.use {
+    val forecast = select(DayForecastTable.NAME).byId(id).
+            parseOpt { DayForecast(HashMap(it)) }
+    if (forecast != null) dataMapper.convertDayToDomain(forecast) else null
+}
+```
+
+`select`从查询与之前的非常相似。我创建了另一个名为`byId`的工具函数，因为通过`id`来请求是很通用的，像这样使用一个函数可以简化处理过程也更具可读性。函数的实现也是相当简单：
+
+```kotlin
+fun SelectQueryBuilder.byId(id: Long): SelectQueryBuilder
+        = whereSimple("_id = ?", id.toString())
+```
+
+它只是使用了`whereSimple`函数实现使用`_id`字段来查询数据。这个函数相当普通，但是如你所见，你可以根据你数据库结构的需要来创建需要的扩展函数，它可以大量地简化你代码的可读性。`DataMapper`有一些不值得一提的轻微改变。你可以通过代码库来查看它们。
+
+另一方面，`ForecastServer`将不会再使用，因为信息总是会被缓存在数据库中。我们可以在一些奇怪的场景下实现一些代码保护，但是我们在这个例子中没有做任何处理，所以如果发生它也会只是抛出一个异常：
+
+```kotlin
+override fun requestDayForecast(id: Long): Forecast?
+        = throw UnsupportedOperationException()
+```
+
+> `try`和`throw`是表达式
+> > 在Kotlin中，几乎一切都是表达式，也就是说一切都会返回一个值。这在函数式编程中是非常重要的，当你使用`try-catch`处理边界的问题或者当抛出异常的时候。比如，在上一个例子中，我们可以给结果分配一个exception就算他们不是相同的类型，而不是必须要去创建一个完整的代码块。当我们需要在一个`when`分支中抛出一个exception的时候也是非常有用：
+>>```kotlin
+	val x = when(y){ 
+				in 0..10 -> 1
+                in 11..20 -> 2
+                else -> throw Exception("Invalid")
+	}
+>>```
+>> `try-catch`中也是一样，我们可以根据try的结果分配一个值：
+>> ```kotlin
+	val x = try{ doSomething() }catch{ null }
+>> ```
+
+最后一件我们需要做的事就是在新的activity中创建一个command来执行请求：
+
+```kotlin
+class RequestDayForecastCommand(
+        val id: Long,
+        val forecastProvider: ForecastProvider = ForecastProvider()) :
+        Command<Forecast> {
+    override fun execute() = forecastProvider.requestForecast(id)
+}
+```
+
+请求返回一个将用于activity绘制UI的`Forecast`结果。
+# 提供一个新的activity
+
+现在我们准备去创建一个`DetailActivity`。我们详情activity将会接收一组从主activity传过来的参数：`forecast id`和`城市名称`。第一个参数将会用来从数据库中请求数据，城市名称用于显示在toolbar上。所以我们首先需要定义一组参数的名字：
+
+```kotlin
+public class DetailActivity : AppCompatActivity() {
+	companion object {
+	    val ID = "DetailActivity:id"
+	    val CITY_NAME = "DetailActivity:cityName"
+    }
+    ...
+}
+```
+
+在`onCreate`函数中，第一步是去设置content view。UI是非常简单的，但是对于这个app来说是足够了：
+
+```kotlin
+<LinearLayout
+	xmlns:android="http://schemas.android.com/apk/res/android"
+	xmlns:tools="http://schemas.android.com/tools"
+	android:layout_width="match_parent"
+	android:layout_height="match_parent"
+	android:orientation="vertical"
+	android:paddingBottom="@dimen/activity_vertical_margin"
+	android:paddingLeft="@dimen/activity_horizontal_margin"
+	android:paddingRight="@dimen/activity_horizontal_margin"
+	android:paddingTop="@dimen/activity_vertical_margin">
+	
+	<LinearLayout
+		android:layout_width="match_parent"
+		android:layout_height="wrap_content"
+		android:orientation="horizontal"
+		android:gravity="center_vertical"
+		tools:ignore="UseCompoundDrawables">
+	
+		<ImageView
+			android:id="@+id/icon"
+			android:layout_width="64dp"
+			android:layout_height="64dp"
+			tools:src="@mipmap/ic_launcher"
+			tools:ignore="ContentDescription"/>
+		
+		<TextView
+			android:id="@+id/weatherDescription"
+			android:layout_width="wrap_content"
+			android:layout_height="wrap_content"
+			android:layout_margin="@dimen/spacing_xlarge"
+			android:textAppearance="@style/TextAppearance.AppCompat.Display1"
+		    tools:text="Few clouds"/>
+    </LinearLayout>
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content">
+        <TextView
+            android:id="@+id/maxTemperature"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:layout_margin="@dimen/spacing_xlarge"
+            android:gravity="center_horizontal"
+            android:textAppearance="@style/TextAppearance.AppCompat.Display3"
+            tools:text="30"/>
+        <TextView
+            android:id="@+id/minTemperature"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:layout_margin="@dimen/spacing_xlarge"
+            android:gravity="center_horizontal"
+            android:textAppearance="@style/TextAppearance.AppCompat.Display3"
+            tools:text="10"/>
+    </LinearLayout>
+</LinearLayout>
+```
+
+然后在`onCreate`代码中去设置它。使用城市的名字设置成toolbar的title。`intent`和`title`通过下面的方法被自动影射到属性：
+
+```kotlin
+setContentView(R.layout.activity_detail)
+title = intent.getStringExtra(CITY_NAME)
+```
+
+`onCreate`实现的另一部分是调用command。这与我们之前做的非常相似：
+
+```kotlin
+async {
+       val result = RequestDayForecastCommand(intent.getLongExtra(ID, -1)).execute()
+       uiThread { bindForecast(result) }
+}
+```
+
+当结果从数据库中获取之后，`bindForecast`函数在UI线程中被调用。我们在这个activity中又一次使用了Kotlin Android Extensions插件来实现不使用`findViewById`来从XML中获取到属性：
+
+```kotlin
+import kotlinx.android.synthetic.activity_detail.*
+...
+
+private fun bindForecast(forecast: Forecast) = with(forecast) {
+       Picasso.with(ctx).load(iconUrl).into(icon)
+       supportActionBar.subtitle = date.toDateString(DateFormat.FULL)
+       weatherDescription.text = description
+       bindWeather(high to maxTemperature, low to minTemperature)
+}
+```
+
+这里有一些有趣的地方。比如，我创建了另一个扩展函数来转换一个`Long`对象到一个用于显示的日期字符串。记住我们在adapter中也使用了，所以明确定义它为一个函数是个不错的实践：
+
+```kotlin
+fun Long.toDateString(dateFormat: Int = DateFormat.MEDIUM): String {
+    val df = DateFormat.getDateInstance(dateFormat, Locale.getDefault())
+    return df.format(this)
+}
+```
+
+我会得到一个`date format`（或者使用默认的DateFormat.MEDIUM）并转换`Long`为一个用户可以理解的`String`。
+
+另一个有趣的地方是`bindWeather`函数。它会接收一个`vararg`的由`Int`和`TextView`组成的`pairs`，并且根据温度给`TextView`设置不同的`text`和`text color`。
+
+```kotlin
+private fun bindWeather(vararg views: Pair<Int, TextView>) = views.forEach {
+    it.second.text = "${it.first.toString()}￿￿"
+    it.second.textColor = color(when (it.first) {
+        in -50..0 -> android.R.color.holo_red_dark
+        in 0..15 -> android.R.color.holo_orange_dark
+        else -> android.R.color.holo_green_dark
+	})
+}
+```
+
+每一个pair，它会设置一个`text`来显示温度和一个根据温度匹配的不同的颜色：低温度用红色，中温度用橙色，其它用绿色。温度值是比较随机的，但是这个是使用`when`表达式让代码变得简短精炼的很好的代表。
+
+`color`是我想念的Anko中的一个扩展函数，它可以很简洁的方式从resources中获取一个color，类似于我们在其它地方使用到的`dimen`。我们写下这一行的时候，当前`support library`依赖`ContextCompat`来从不同的Android版本中获取一个color：
+
+```kotlin
+public fun Context.color(res: Int): Int = ContextCompat.getColor(this, res)
+```
+
+`AndroidManifest`也需要知道新activity的存在：
+
+```kotlin
+<activity
+    android:name=".ui.activities.DetailActivity"
+    android:parentActivityName=".ui.activities.MainActivity" >
+    <meta-data
+        android:name="android.support.PARENT_ACTIVITY"
+        android:value="com.antonioleiva.weatherapp.ui.activities.MainActivity" />
+</activity>
+```
+# 启动一个activity：reified函数
+
+最后一步是从`main activity`启动一个`detail activity`。我们可以如下重写adapter实例：
+
+```kotlin
+val adapter = ForecastListAdapter(result) {
+	val intent = Intent(MainActivity@this, javaClass<DetailActivity>())
+	intent.putExtra(DetailActivity.ID, it.id)
+	intent.putExtra(DetailActivity.CITY_NAME, result.city)
+	startActivity(intent)
+}
+```
+
+但是这是非常冗长的。一如既往地，Anko提供了简单得多的方式通过`reified function`来启动一个activity：
+
+```kotlin
+val adapter = ForecastListAdapter(result) {
+    startActivity<DetailActivity>(DetailActivity.ID to it.id,
+            DetailActivity.CITY_NAME to result.city)
+}
+```
+
+`reified function`背后到底有什么魔法呢？就像你可能知道的那样，当我们在Java中创建一个范型函数，我们没有办法得到范型类型的Class。一个流行的变通方法是作为参数传入一个Class。在Kotlin中，一个内联（`inline`）函数可以被具体化（`reified`），这意味着我们可以在函数中得到并使用范型类型的Class。Anko真正使用它的一个简单的例子接下来会讲到（在这个例子中我只使用了`String`）：
+
+```kotlin
+public inline fun <reified T: Activity> Context.startActivity(
+        vararg params: Pair<String, String>) {
+    val intent = Intent(this, T::class.javaClass)
+    params forEach { intent.putExtra(it.first, it.second) }
+    startActivity(intent)
+}
+```
+
+真正的实现要更加复杂一点因为它使用了一个很长的令人讨厌的`when`表达式来增加由类型决定的额外信息，但是在概念上来说它没有增加其它更有用的知识。
+
+`Reified`函数是有一个可以简化代码和提高理解性的语法糖。在这个例子中，它通过获取到了范型类型的`javaClass`来创建了一个intent，迭代所有参数并增加到intent，然后使用Intent来启动activity。`reified`限制于activity的子类。
+
+剩下的一点细节在代码库中已经说明。我们现在有一个非常简单（但是完整）的主从视图（`master-detail`）的App，它使用Kotlin实现，没有使用一行Java代码。
+
+#接口和委托
+# 接口
+
+Kotlin中的接口比Java 7中要强大得多。如果你使用Java 8，它们非常相似。在Kotlin中，我们可以像Java中那样使用接口。想象我们有一些动物，它们的其中一些可以飞行。这个是我们针对飞行动物的接口：
+
+```kotlin
+interface FlyingAnimal {
+	fun fly()
+}
+```
+
+鸟和蝙蝠都可以通过扇动翅膀的方式飞行。所以我们为它们创建两个类：
+
+```kotlin
+class Bird : FlyingAnimal {
+    val wings: Wings = Wings()
+    override fun fly() = wings.move()
+}
+
+class Bat : FlyingAnimal {
+    val wings: Wings = Wings()
+    override fun fly() = wings.move()
+}
+```
+
+当两个类继承自一个接口，非常典型的是它们两者共享相同的实现。但是Java 7中的接口只能定义行为，但是不能去实现它。
+
+Kotlin接口在某一方面它可以实现函数。它们与类唯一的不同之处是它们是无状态（stateless）的，所以属性需要子类去重写。类需要去负责保存接口属性的状态。
+
+我们可以让接口实现`fly`函数：
+
+```kotlin
+interface FlyingAnimal {
+    val wings: Wings
+    fun fly() = wings.move()
+}
+```
+
+就像提到的那样，类需要去重写属性：
+
+```kotlin
+class Bird : FlyingAnimal {
+	override val wings: Wings = Wings()
+}
+
+class Bat : FlyingAnimal {
+	override val wings: Wings = Wings()
+}
+```
+
+现在鸟和蝙蝠都可以飞行了：
+
+```kotlin
+val bird = Bird()
+val bat = Bat()
+
+bird.fly()
+bat.fly()
+```
+# 委托
+
+[委托模式]是一个很有用的模式，它可以用来从类中抽取出主要负责的部分。委托模式是Kotlin原生支持的，所以它避免了我们需要去调用委托对象。委托者只需要指定实现的接口的实例。
+
+在我们前面的例子中，我们可以通过构造函数指定动物怎么飞行，而不是实现它。比如，一个使用翅膀飞行的动物可以用这种方式指定：
+
+```kotlin
+interface CanFly {
+	fun fly()
+}
+
+class Bird(f: CanFly) : CanFly by f
+```
+
+我们可以使用接口来指示鸟可以飞行，但是鸟的飞行方式被定义在一个委托中，这个委托定义在构造函数中，所以我们可以针对不同的鸟使用不同的飞行方式。动物使用翅膀飞行的方式被定义在另一个类中：
+
+```kotlin
+class AnimalWithWings : CanFly {
+    val wings: Wings = Wings()
+    override fun fly() = wings.move()
+}
+```
+
+动物扇动翅膀来飞行。所以我们可以创建一个鸟，它使用翅膀飞行：
+
+```kotlin
+val birdWithWings = Bird(AnimalWithWings())
+birdWithWings.fly()
+```
+
+但是现在翅膀可以被别的不是鸟类的动物使用。如果我们假设蝙蝠使用翅膀，我们可以直接指定委托来实例化对象：
+
+```kotlin
+class Bat : CanFly by AnimalWithWings()
+...
+val bat = Bat()
+bat.fly()
+```
+
+[委托模式]: https://en.wikipedia.org/wiki/Delegation_pattern
+# 在我们的App中实现一个例子
+
+接口可以被用来从类中提取出相似行为的通用代码。比如，我们可以创建一个接口用于处理app的toolbar。`MainActivity`和`DetailActivity`在处理`toolbar`时会共享这些相似的代码。
+
+但是受限，我们需要做出一些改变，使用被定义在布局中`toolbar`，而不是标准的`ActionBar`。第一件事是继承`NoActionBar`主题。这样`toolbar`不会自动被包含进来：
+
+```kotlin
+<style name="AppTheme" parent="Theme.AppCompat.Light.NoActionBar">
+	<item name="colorPrimary">#ff212121</item>
+	<item name="colorPrimaryDark">@android:color/black</item>
+</style>
+```
+
+我们使用`light`主题。然后我们创建一个`toolbar`的布局，我们稍后会在其它的布局中使用到它：
+
+```kotlin
+<android.support.v7.widget.Toolbar
+	xmlns:app="http://schemas.android.com/apk/res-auto"
+	xmlns:android="http://schemas.android.com/apk/res/android"
+	android:id="@+id/toolbar"
+	android:layout_width="match_parent"
+	android:layout_height="?attr/actionBarSize"
+	android:background="?attr/colorPrimary"
+	app:theme="@style/ThemeOverlay.AppCompat.Dark.ActionBar"
+	app:popupTheme="@style/ThemeOverlay.AppCompat.Light"/>
+```
+
+`toolbar`指定了它自己的背景，一个针对自己的`dark`主题和一个针对生成的弹出框的`light`主题（`overflow menu`实例）。我们现在已经有了相同的主题：`light`主题和`dark`主题的`Action Bar`。
+
+下一步我们将修改`MainActivity`的布局，增加一个toolbar：
+
+```kotlin
+<FrameLayout
+	xmlns:android="http://schemas.android.com/apk/res/android"
+	android:layout_width="match_parent"
+	android:layout_height="match_parent">
+
+	<android.support.v7.widget.RecyclerView
+		android:id="@+id/forecastList"
+		android:layout_width="match_parent"
+		android:layout_height="match_parent"
+		android:clipToPadding="false"
+		android:paddingTop="?attr/actionBarSize"/>
+	
+	<include layout="@layout/toolbar"/>
+</FrameLayout>
+```
+
+现在toolbar被增加到布局中，我们可以开始使用它。我们创建了一个接口，它可以让我们：
+
+- 改变title
+- 指定是否显示上一步的导航动作
+- 滚动时的toolbar动画
+- 给所有的activity设置相同的菜单，甚至行为
+
+然后让我们定义`ToolbarManager`：
+
+```kotlin
+interface ToolbarManager {
+    val toolbar: Toolbar
+    ...
+}
+```
+
+它将需要一个toolbar属性。接口是无状态的，所以属性可以被定义，但是不能赋值。子类会实现这个接口并重写这个属性。
+
+另一方面，我们可以不使用重写来实现无状态的属性。也就是说属性不需要维护一个`backup field`。一个处理toolbar title属性的例子：
+
+```kotlin
+var toolbarTitle: String
+    get() = toolbar.title.toString()
+    set(value) {
+        toolbar.title = value
+    }
+```
+
+因为属性仅仅使用了toolbar，它不需要保存任何新的状态。
+
+我们现在创建了一个新的函数用来初始化toolbar，inflate一个menu并且设置一个listener：
+
+```kotlin
+fun initToolbar(){
+	toolbar.inflateMenu(R.menu.menu_main)
+    toolbar.setOnMenuItemClickListener {
+		when (it.itemId) {
+		    R.id.action_settings -> App.instance.toast("Settings")
+		    else -> App.instance.toast("Unknown option")
+		}
+		true
+	}
+}
+```
+
+我们可以增加一个函数用来开启toolbar上面导航icon，设置一个箭头的icon并设置一个当icon被按压时触发的事件：
+
+```kotlin
+fun enableHomeAsUp(up: () -> Unit) {
+       toolbar.navigationIcon = createUpDrawable()
+       toolbar.setNavigationOnClickListener { up() }
+}
+
+private fun createUpDrawable() = with (DrawerArrowDrawable(toolbar.ctx)){
+    progress = 1f
+	this
+}
+```
+
+这个函数接收一个listener，使用[DrawerArrowDrawable]来创建一个最后状态（当箭头已经显示时）的drawable，然后把listener设置给toolbar。
+
+最后，接口将会提供一个函数，它允许toolbar可以attached到一个scroll上面，并且根据scroll的方向来执行动画。当往下滚动时toolbar会消失 ，往上滚动toolbar会再次显示：
+
+```kotlin
+fun attachToScroll(recyclerView: RecyclerView) {
+    recyclerView.addOnScrollListener(object : RecyclerView.OnScrollListener() {
+		override fun onScrolled(recyclerView: RecyclerView?, dx: Int, dy: Int) {
+			if (dy > 0) toolbar.slideExit() else toolbar.slideEnter()
+	    }
+    })
+}
+```
+
+我们会创建两个用于view从屏幕中显示或者消失动画的扩展函数。我们会检查是否动画之前没有执行过。这种方式可以避免每次不同的滚动view都会执行动画：
+
+```kotlin
+fun View.slideExit() {
+	if (translationY == 0f) animate().translationY(-height.toFlat())
+}
+
+fun View.slideEnter() {
+	if (translationY < 0f) animate().translationY(0f)
+}
+```
+
+在`toobar manager`实现之后，是时候在`MainActivity`中使用它了。我们首先指定toolbar属性。我们可以使用`lazy`委托实现，这样会在我们第一次使用它的时候才会inflate：
+
+```kotlin
+override val toolbar by lazy { find<Toolbar>(R.id.toolbar) }
+```
+
+`MainActivity`将会仅仅初始化toolbar并attach到`RecyclerView`的滚动并修改toolbar的title：
+
+```kotlin
+override fun onCreate(savedInstanceState: Bundle?) { 
+super.onCreate(savedInstanceState) 
+setContentView(R.layout.activity_main) initToolbar()
+    forecastList.layoutManager = LinearLayoutManager(this)
+    attachToScroll(forecastList)
+    async {
+        val result = RequestForecastCommand(94043).execute()
+        uiThread {
+			val adapter = ForecastListAdapter(result) {
+		    startActivity<DetailActivity>(DetailActivity.ID to it.id,
+			            DetailActivity.CITY_NAME to result.city)
+			}
+			forecastList.adapter = adapter
+			toolbarTitle = "${result.city} (${result.country})"
+		} 
+	}
+}
+```
+
+`DetailActivity`也需要一些布局上的修改：
+
+```kotlin
+<LinearLayout
+    xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:tools="http://schemas.android.com/tools"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:orientation="vertical">
+    
+    <include layout="@layout/toolbar"/>
+    
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="horizontal"
+        android:gravity="center_vertical"
+		android:paddingTop="@dimen/activity_vertical_margin"
+        android:paddingLeft="@dimen/activity_horizontal_margin"
+        android:paddingRight="@dimen/activity_horizontal_margin"
+        tools:ignore="UseCompoundDrawables">
+       ....
+    </LinearLayout>
+    
+</LinearLayout>
+```
+
+使用相同的方式去指定toolbar属性。`DetailActivity`也会初始化toolbar，设置title并且开启导航返回icon：
+
+```kotlin
+override fun onCreate(savedInstanceState: Bundle?) {
+    super.onCreate(savedInstanceState);
+    setContentView(R.layout.activity_detail)
+    
+	initToolbar()
+	toolbarTitle = intent.getStringExtra(CITY_NAME) 
+	enableHomeAsUp { onBackPressed() }
+	...
+}
+```
+
+接口可以帮助我们从类中提取出公共的代码来共享相似的行为。可以作为让我们代码精炼合理简洁可复用的替代方案。思考哪方面接口可以帮助你写出更好的代码。
+
+[DrawerArrowDrawable]: https://developer.android.com/reference/android/support/v7/graphics/drawable/DrawerArrowDrawable.html
+# 泛型
+
+泛型编程包括，在不指定代码中使用到的确切类型的情况下来编写算法。用这种方式，我们可以创建函数或者类型，唯一的区别只是它们使用的类型不同，提高代码的可重用性。这种代码单元就是我们所知道的泛型，它们存在于很多的语言之中，包括Java和Kotlin。
+
+在Kotlin中，泛型甚至更加重要，因为经常使用扩展函数将会成倍增加我们泛型使用频率。尽管我们已经在本书中盲目地使用了泛型，但是泛型在任何语言中通常都是比较困难的一部分，所以我尝试使用尽可能简单的方式来讲解它，这样主要的思想也会足够地清晰。
+# 基础
+
+举个例子，我们可以创建一个指定泛型类：
+
+```kotlin
+class TypedClass<T>(parameter: T) {
+    val value: T = parameter
+}
+```
+
+这个类现在可以使用任何的类型初始化，并且参数也会使用定义的类型，我们可以这么做：
+
+```kotlin
+val t1 = TypedClass<String>("Hello World!")
+val t2 = TypedClass<Int>(25)
+```
+
+但是Kotlin很简单并且缩减了模版代码，所以如果编译器能够推断参数的类型，我们甚至也就不需要去指定它：
+
+```kotlin
+val t1 = TypedClass("Hello World!")
+val t2 = TypedClass(25)
+val t3 = TypedClass<String?>(null)
+```
+
+如第三个对象接收一个null引用，那仍然还是需要指定它的类型，因为它不能去推断出来。
+
+我们可以像Java中那样在定义中指定的方式来增加类型限制。比如，如果我们想限制上一个类中为非null类型，我们只需要这么做：
+
+```kotlin
+class TypedClass<T : Any>(parameter: T) { 
+	val value: T = parameter
+}
+```
+
+如果你再去编译前面的代码，你将看到`t3`现在会抛出一个错误。可null类型不再被允许了。但是限制明显可以更加严厉。如果我们只希望`Context`的子类该怎么做？很简单：
+
+```kotlin
+class TypedClass<T : Context>(parameter: T) { 
+	val value: T = parameter
+}
+```
+
+现在所有继承`Context`的类都可以在我们这个类中使用。其它的类型是不被允许的。
+
+当然，可以使用函数中。我们可以相当简单地构建泛型函数：
+
+```kotlin
+fun <T> typedFunction(item: T): List<T> {
+	...
+}
+```
+# 变体
+
+这是真的是最难理解的部分之一。在Java中，当我们使用泛型的时候会出现问题。逻辑告诉我们`List<String>`应该可以转型为`List<Object>`，因为它有更弱的限制。但是我们来看下这个例子：
+
+```kotlin
+List<String> strList = new ArrayList<>();
+List<Object> objList = strList;
+objList.add(5);
+String str = objList.get(0);
+```
+
+如果Java编译器允许我们这么做，我们可以增加一个`Integer`到`Object` List，但是它明显会在某一时刻奔溃。这就是为什么语言中增加了通配符。通配符可以在限制这个问题中可以增加灵活性。
+
+如果我们增加了`? extends Object`，我们使用了协变（`covariance`），它表示我们可以处理任何使用了类型，比Object更严格的对象，但是我们只有使用`get`操作时是安全的。如果我们想去拷贝一个`Strings`集合到`Objects`集合中，我们应该是允许的，对吧？然后，如果我们这样：
+
+```kotlin
+List<String> strList = ...;
+List<Object> objList = ...;
+objList.addAll(strList);
+```
+
+这样是可以的，因为定义在`Collection`接口中的`addAll()`是这样的：
+
+```java
+List<String>
+interface Collection<E> ... {
+	void addAll(Collection<? extends E> items);
+}
+```
+
+否则，没有通配符，我们不会允许在这个方法中使用`String` List。相反地，当然会失败。我们不能使用`addAll()`来增加一个`Objects` List到`Strings` List中。因为我们只是用那个方法从`collection`中获取元素，这是一个完美的协变（`covariance`）的例子。
+
+另一方面，我们可以在对立面上发现逆变（`contravariance`）。按照集合的例子，如果我们想把传过来的参数增加到集合中去，我们可以增加更加限制的类型到泛型集合中。比如，我们可以增加`Strings`到`Object`List：
+
+```java
+void copyStrings(Collection<? super String> to, Collection<String> from) {
+    to.addAll(from);
+}
+```
+
+增加`Strings`到另一个集合中唯一的限制就是那个集合接收`Strings`或者父类。
+
+但是通配符都有它的限制。通配符定义了使用场景变体（`use-site variance`），这意味着当我们使用它的时候需要声明它。这表示每次我们声明一个泛型变量时都会增加模版代码。
+
+让我们看一个例子。使用我们之前相似的类：
+
+```java
+class TypedClass<T> {
+    public T doSomething(){
+	    ...
+    }
+}
+```
+
+这些代码不会被编译：
+
+```java
+TypedClass<String> t1 = new TypedClass<>();
+TypedClass<Object> t2 = t1;
+```
+
+尽管它的确没有意义，因为我们仍然保持了类中的所有的方法并且没有任何损坏。我们需要指定的类型可以有一个更加灵活的定义。
+
+```kotlin
+TypedClass<String> t1 = new TypedClass<>();
+TypedClass<? extends String> t2 = t1;
+```
+
+这会让代码更加难以理解，而且增加了一些额外的模版代码。
+
+另一方面，Kotlin通过内部声明变体（`declaration-site variance`）可以使用更加容易的方式来处理。这表示当我们定义一个类或者接口的时候我们可以处理弱限制的场景，我们可以在其它地方直接使用它。
+
+所以让我们看看它在Kotlin中是怎么工作的。相比冗长的通配符，Kotlin仅仅使用`out`来针对协变（`covariance`）和使用`in`来针对逆变（`contravariance`）。在这个例子中，当我们类产生的对象可以被保存到弱限制的变量中，我们使用协变。我们可以直接在类中定义声明｛
+
+```kotlin
+class TypedClass<out T>() {
+    fun doSomething(): T {
+	    ...
+	}
+}
+```
+
+这就是所有我们需要的。现在，在Java中不能编译的代码在Kotlin中可以完美运行：
+
+```kotlin
+val t1 = TypedClass<String>()
+val t2: TypedClass<Any> = t1
+```
+
+如果你已经使用了这些概念，我确信你可以很简单地在Kotlin使用`in`和`out`。否则，你也只是需要一些联系和概念上的理解。
+# 泛型例子
+
+理论之后，我们转移到一些实际功能上面，这会让我们更加简单地掌握它。为了不重复发明轮子，我使用三个Kotlin标准库中的三个函数。这些函数让我们仅使用泛型的实现就可以做一些很棒的事情。它可以鼓舞你创建自己的函数。
+
+#### let
+
+`let`实在是一个简单的函数，它可以被任何对象调用。它接收一个函数（接收一个对象，返回函数结果）作为参数，作为参数的函数返回的结果作为整个函数的返回值。它在处理可null对象的时候是非常有用的，下面是它的定义：
+
+```kotlin
+inline fun <T, R> T.let(f: (T) -> R): R = f(this)
+```
+
+它使用了两个泛型类型：`T` 和 `R`。第一个是被调用者定义的，它的类型被函数接收到。第二个是函数的返回值类型。
+
+我们怎么去使用它呢？你可能还记得当我们从数据源中获取数据时，结果可能是null。如果不是null，则把结果映射到`domain model`并返回结果，否则直接返回null：
+
+```kotlin
+if (forecast != null) dataMapper.convertDayToDomain(forecast) else null
+```
+
+这代码是非常丑陋的，我们不需要使用这种方式去处理可null对象。实际上如果我们使用`let`，都不需要`if`：
+
+```kotlin
+forecast?.let { dataMapper.convertDayToDomain(it) }
+```
+
+多亏`?.`操作符，`let`函数只会在`forecast`不是null的时候才会执行。否则它会返回null。也就是我们想达到的效果。
+
+#### with
+
+本书中我们大量讲了这个函数。`with`接收一个对象和一个函数，这个函数会作为这个对象的扩展函数执行。这表示我们根据推断可以在函数内使用`this`。
+
+```kotlin
+inline fun <T, R> with(receiver: T, f: T.() -> R): R = receiver.f()
+```
+
+泛型在这里也是以相同的方式运行：`T`代表接收类型，`R`代表结果。如你所见，函数通过`f: T.() -> R`声明被定义成了扩展函数。这就是为什么我们可以调用`receiver.f()`。
+
+通过这个app，我们有几个例子：
+
+```kotlin
+fun convertFromDomain(forecast: ForecastList) = with(forecast) {
+    val daily = dailyForecast map { convertDayFromDomain(id, it) }
+    CityForecast(id, city, country, daily)
+}
+```
+
+#### apply
+
+它看起来于`with`很相似，但是是有点不同之处。`apply`可以避免创建builder的方式来使用，因为对象调用的函数可以根据自己的需要来初始化自己，然后`apply`函数会返回它同一个对象：
+
+```kotlin
+inline fun <T> T.apply(f: T.() -> Unit): T { f(); return this }
+```
+
+这里我们只需要一个泛型类型，因为调用这个函数的对象也就是这个函数返回的对象。一个不错的例子：
+
+```kotlin
+val textView = TextView(context).apply {
+    text = "Hello"
+    hint = "Hint"
+    textColor = android.R.color.white
+}
+```
+
+它创建了一个`TextView`，修改了一些属性，然后赋值给一个变量。一切都很简单，具有可读性和坚固的语法。让我们用在当前的代码中。在`ToolbarManager`中，我们使用这种方式来创建导航drawable：
+
+```kotlin
+private fun createUpDrawable() = with(DrawerArrowDrawable(toolbar.ctx)) {
+    progress = 1f
+	this
+}
+```
+
+使用`with`和返回`this`是非常清晰的，但是使用`apply`可以更加简单：
+
+```kotlin
+private fun createUpDrawable() = DrawerArrowDrawable(toolbar.ctx).apply {
+	progress = 1f
+}
+```
+
+你可以在`Kotlin for Android Developer`代码库中查看这些小的优化。
+# 设置界面
+
+直到现在，我们都是使用的默认的城市来实现这个app，但是现在是时候增加一个选择城市的功能了。我们的App需要一个设置栏来让用户修改城市。
+
+我们使用`zip code`（邮编）来区分城市。一个真正的App可能需要更多的信息，因为只有邮编在整个世界中可能无法作为辨认依据。但是我们至少会显示在设置中使用`zip code`定义的世界上的城市。这会是一个用来解释怎么使用有趣的方式处理preferences的例子。
+
+# 创建一个设置activity
+
+当toolbar上溢出菜单（`overflow menu`）的`settings`选项被点击时，需要打开一个新的Activity。所以首先要做的事情时需要一个新的`SettingActivity`：
+
+```kotlin
+class SettingsActivity : AppCompatActivity() {
+	
+	override fun onCreate(savedInstanceState: Bundle?) {
+        super.onCreate(savedInstanceState)
+        setContentView(R.layout.activity_settings)
+        setSupportActionBar(toolbar)
+        supportActionBar.setDisplayHomeAsUpEnabled(true)
+    }
+
+	override fun onOptionsItemSelected(item: MenuItem) = when (item.itemId) {
+        android.R.id.home -> { onBackPressed(); true }
+        else -> false
+	}
+}
+```
+
+当用户离开这个界面的时我们需要保存用户`preference`（偏好），所以我们需要像处理`Back`一样处理`Up`动作，重定向动作到`onBackPressed`。现在，让我们要创建一个XML布局。对于这个`preference`来说一个简单`EditText`就足够了：
+
+```xml
+<FrameLayout
+	xmlns:android="http://schemas.android.com/apk/res/android"
+	android:layout_width="match_parent"
+	android:layout_height="match_parent">
+
+	<include layout="@layout/toolbar"/>
+	<LinearLayout
+		android:orientation="vertical"
+		android:layout_width="match_parent"
+		android:layout_height="match_parent"
+		android:layout_marginTop="?attr/actionBarSize"
+		android:padding="@dimen/spacing_xlarge">
+	
+		<TextView
+			android:layout_width="wrap_content"
+			android:layout_height="wrap_content"
+			android:text="@string/city_zipcode"/>
+		
+		<EditText
+			android:id="@+id/cityCode"
+			android:layout_width="match_parent"
+			android:layout_height="wrap_content"
+			android:hint="@string/city_zipcode"
+			android:inputType="number"/>
+
+	</LinearLayout>
+</FrameLayout>
+```
+
+然后只需要在`AndroidManifest.xml`中声明这个activity：
+
+```xml
+<activity
+android:name=".ui.activities.SettingsActivity"
+android:label="@string/settings"/>
+```
+# 访问Shared Preferences
+
+你可能知道什么是Android [Shared Preferences]。可以通过Android框架简单存储的一系列key和value对。这些`preferences`与SDK的一部分融为一体，使得任务变得更加容易。而且从Android 6.0（Marshmallow），`shared preferences`可以自动被云存储，所以当一个用户在一个新的设备上面恢复App的时候，它们的`preferences`也会被恢复。
+
+多亏使用了属性委托，我们可以使用非常简单的方式来处理`preferences`。我们可以创建一个委托，当`get`被调用时去查询，当`set`被调用时去执行保存操作。
+
+因为我们想去保存`zip code`，它是一个long型，所以让我们创建一个Long属性的委托吧。在`DelegatesExtensions.kt`中，实现一个新的`LongPreference`类：
+
+```kotlin
+class LongPreference(val context: Context, val name: String, val default: Long)
+    :  ReadWriteProperty<Any?, Long> {
+
+	val prefs by lazy {
+        context.getSharedPreferences("default", Context.MODE_PRIVATE)
+    }
+
+	override fun getValue(thisRef: Any?, property: KProperty<*>): Long {
+        return prefs.getLong(name, default)
+	}
+	
+	override fun setValue(thisRef: Any?, property: KProperty<*>, value: Long) {
+        prefs.edit().putLong(name, value).apply()
+    }
+}
+```
+
+首先，我们使用`lazy`委托的方式创建一个preferences。这样的话，如果我们没有使用这个属性，这个委托就不会请求这个`SharedPreferences`对象。
+
+当`get`被调用，它的实现是使用preferences实例去获取一个委托声明中指定名字的long属性，如果没有找到这个属性，则默认使用default。当一个值被`set`，拿到`preferences editor`并使用属性名保存。
+
+我们可以在`DelegatesExt`中定义一个新的委托，这样我们访问时就简单很多：
+
+```kotlin
+object DelegatesExt {
+    ....
+    fun longPreference(context: Context, name: String, default: Long) =
+        LongPreference(context, name, default)
+}
+```
+
+在`SettingActivity`，现在可以定义一个属性去处理`zip code`偏好。我创建了两个常量用来作为名字和属性的默认值。这种方式可以在App其他地方使用：
+
+```kotlin
+companion object {
+    val ZIP_CODE = "zipCode"
+    val DEFAULT_ZIP = 94043L
+}
+
+var zipCode: Long by DelegatesExt.longPreference(this, ZIP_CODE, DEFAULT_ZIP)
+```
+
+现在preference工作起来就非常简单了，我们可以从属性中得到并赋值给`EditText`：
+
+```kotlin
+override fun onCreate(savedInstanceState: Bundle?) {
+    ...
+    cityCode.setText(zipCode.toString())
+}
+```
+
+我们不能使用自动生成的属性`text`，因为`EditText`在`getText`中返回的是`Editable`，所以该属性默认为该值。如果我尝试去分配一个`String`，编译器会报错，使用`setText()`就足够了。
+
+现在具备了所有要实现`onBackPressed`的东西。这里，一个属性的新值会被储存：
+
+```kotlin
+override fun onBackPressed() {
+    super.onBackPressed()
+    zipCode = cityCode.text.toString().toLong()
+}
+```
+
+`MainActivity`需要一些小的改变。首先，它也需要一个`zip code`属性。
+
+```kotlin
+val zipCode: Long by DelegatesExt.longPreference(this, SettingsActivity.ZIP_CODE,
+            SettingsActivity.DEFAULT_ZIP)
+```
+
+然后，我把`forecast load`的代码移动到了`onResume`，这样每次activity resumed，它都会刷新数据，以防`code zip`被修改。当然这里有更加复杂一点的方式去做，比如通过在请求forecast之前检查是否`zip code`真的改变了。但是我像保持这个例子的简单性，而且因为请求的数据已经保存在本地数据库中了，所以这个解决方案也不算太坏：
+
+```kotlin
+override fun onResume() {
+    super.onResume()
+    loadForecast()
+}
+
+private fun loadForecast() = async {
+    val result = RequestForecastCommand(zipCode).execute()
+    uiThread {
+	    val adapter = ForecastListAdapter(result) {
+		    startActivity<DetailActivity>(DetailActivity.ID to it.id,
+		            DetailActivity.CITY_NAME to result.city)
+		}
+		forecastList.adapter = adapter
+		toolbarTitle = "${result.city} (${result.country})"
+	} 
+}
+```
+
+`RequestForecastCommand`现在使用`zipCode`而不是之前的是一个固定值。
+
+这里还有意见我们必须要做的事情：当溢出菜单的`settings`点击时启动这个`setting activity`。在`ToolbarManager`中的`initToolbar`函数需要有一些小的修改：
+
+```kotlin
+when (it.itemId) {
+    R.id.action_settings -> toolbar.ctx.startActivity<SettingsActivity>()
+    else -> App.instance.toast("Unknown option")
+}
+```
+
+[Shared Preferences]: http://developer.android.com/training/basics/data-storage/shared-preferences.html
+# 泛型preference委托
+
+现在我们已经时泛型专家了，为什么不扩展`LongPreference`为支持所有`Shared Preferences`支持的类型呢？我们来创建一个`Preference`委托：
+
+```kotlin
+class Preference<T>(val context: Context, val name: String, val default: T)
+    : ReadWriteProperty<Any?, T> {
+	
+	val prefs by lazy {
+	    context.getSharedPreferences("default", Context.MODE_PRIVATE)
+    }
+	
+	override fun getValue(thisRef: Any?, property: KProperty<*>): T {
+		return findPreference(name, default)
+	}
+
+	override fun setValue(thisRef: Any?, property: KProperty<*>, value: T) {
+        putPreference(name, value)
+    }
+	...
+}
+```
+
+这个preference与我们之前使用的非常相似。我们仅仅替换了`Long`为泛型类型`T`，然后调用了两个函数来做具体重要的工作。这些函数非常简单，尽管有些重复。它们会检查类型然后使用指定的方式来操作。比如，`findPrefernce`函数如下：
+
+```kotlin
+private fun <T> findPreference(name: String, default: T): T = with(prefs) {
+        val res: Any = when (default) {
+        is Long -> getLong(name, default)
+        is String -> getString(name, default)
+        is Int -> getInt(name, default)
+        is Boolean -> getBoolean(name, default)
+        is Float -> getFloat(name, default)
+        else -> throw IllegalArgumentException(
+            "This type can be saved into Preferences")
+    }
+
+	res as T
+}
+```
+
+`putPreference`函数也是一样，但是在`when`最后通过`apply`，使用`preferences editor`保存结果：
+
+```kotlin
+private fun <U> putPreference(name: String, value: U) = with(prefs.edit()) {
+    when (value) {
+        is Long -> putLong(name, value)
+        is String -> putString(name, value)
+        is Int -> putInt(name, value)
+        is Boolean -> putBoolean(name, value)
+        is Float -> putFloat(name, value)
+        else -> throw IllegalArgumentException("This type can be saved into Pref\
+erences")
+    }.apply()
+}
+```
+
+现在修改`DelegateExt`：
+
+```kotlin
+object DelegatesExt {
+	...
+	fun preference<T : Any>(context: Context, name: String, default: T)
+	    = Preference(context, name, default)
+}
+```
+
+这章之后，用户可以访问设置界面并修改`zip code`。然后当我们返回主界面，forecast会自动重新刷新并显示新的信息。查看代码库中其余xi wei
+# 测试你的App
+
+我们即将到达这次旅程的结尾。通过本书你已经学习了大部分Kotlin的知识，但是你可能会怀疑你是否可以测试你只用Kotlin编写的Android App呢？回答是：当然！
+
+在Android中我们有两种不同的测试：`unit test`和`instrumentation test`。很明显本书不会来教你怎么去测试的，有很多专门为此写的书。我在这一章的目标是怎么去搭建你测试环境，展示给你看Kotlin在测试方面也能很好的工作。
+# Unit testing
+
+我不会对`unit testing`（单元测试）是什么的话题展开讨论。存在很多定义，但是都有一些细微的不同。一个普通的观点可能是`unit testing`验证一个单位（`unit`）的源代码的测试。一个单位（`unit`）包含什么就留给读者了。在我们的例子中，我仅仅去定义了一个`unit test`作为一个不需要设备运行的测试。IDE将会运行这些测试然后显示最后的结果分辩哪些测试成功哪些测试失败了。
+
+`Unit testing`通常使用`JUnit`库。所以让我们增加这个依赖到`build.gradle`。因为这个依赖只会在跑测试的时候才会用到，所以我们可以使用`testCompile`而不是`compile`。用这种方式，这个库会在正式编译时忽略掉，可以减少APK的大小：
+
+```groovy
+dependencies {
+	...
+	testCompile 'junit:junit:4.12'
+}
+```
+
+现在同步gradle来获取该库并加入到你的项目中。为了开启`unit testing`，打开`Build Variants`tab（你可能可以在IDE的左边找到它），点击`Test Artifact`下拉，你应该选择`Unit Tests`。
+
+另一件你需要做的事情是创建一个新的文件夹。在src下面，你可能已经有`androidTest`和`main`了。创建另一个名为`test`的文件夹，再在它下面创建一个`java`文件夹。所以现在你应该有一个名为`src/test/java`绿色的文件夹。这是IDE发现我们在使用`Unit Test`模式好的迹象，这个文件夹中将会包括一些测试文件。
+
+我们来写一个非常简单的测试来看看一切是不是正常运行了。使用合适的包名（我的是`com.antonioleiva.weatherapp`，但是你需要使用你app中的主包名）创建一个新的名为`SimpleTest`的Kotlin类。当你创建完，编写如下简单的测试：
+
+```kotlin
+import org.junit.Test
+import kotlin.test.assertTrue
+class SimpleTest {
+	@Test fun unitTestingWorks() {
+	    assertTrue(true)
+	}
+}
+```
+
+使用`@Test`注解来辨别该函数为是一个测试。确认是`org.unit.Test`。然后增加一个简单的断言。它只是判断了true是否是true，它显然会成功。这个测试只是用开确认一切配置正确。
+
+执行测试，只需要在你在`test`下创建的新的`java`文件夹上右击，然后选择`Run All Tests`。当编译完成后，它会运行测试并会看见结果简介的显示。你应该可以看见我们的测试通过了。
+
+现在是时候创建一个真正的测试了。所有使用Android框架来处理的测试可能都需要一个`instrumentation test`或者使用更复杂的像[Robolectric]库。所以在这些例子中我会不使用框架的任何东西。举个例子，我将测试从`Long`转`String`的扩展函数。
+
+创建一个新的名为`ExtensionTests`的文件，然后增加如下测试：
+
+```kotlin
+class ExtensionsTest {
+	
+	@Test fun testLongToDateString() {
+        assertEquals("Oct 19, 2015", 1445275635000L.toDateString())
+    }
+
+	@Test fun testDateStringFullFormat() {
+        assertEquals("Monday, October 19, 2015",
+            1445275635000L.toDateString(DateFormat.FULL))
+    }
+}
+```
+
+这些测试检测`Long`实例是否可以转换成一个`String`。第一个测试默认行为（使用DateFormat.MEDIUM)），而第二个指定一个不同的格式。运行这些测试然后你会看到它们都通过了。我建议你修改它们然后看看它们失败是怎么样的。
+
+如果你在Java中使用过测试，你将会发现这并没有什么太多的不同。我会演示一个简单的例子，我们可以对`ForecastProvider`进行一些测试。我们可以使用`Mockito`库来模拟其它的类然后独立测试provider：
+
+```groovy
+dependencies {
+    ...
+    testCompile "junit:junit:4.12"
+    testCompile "org.mockito:mockito-core:1.10.19"
+}
+```
+
+现在创建了一个`ForecastProviderTest`。我们要去测试`ForecastProvider`，使用`DataSource`来返回结果，看它结果是否为null。所以首先我们需要模拟一个`ForecastDataSource`：
+
+```kotlin
+val ds = mock(ForecastDataSource::class.java)
+`when`(ds.requestDayForecast(0)).then {
+    Forecast(0, 0, "desc", 20, 0, "url")
+}
+```
+
+如你所见，我们需要在`when`上加反引号。因为`when`在Kotlin中是一个保留关键字，所以如果我们在一些Java代码中使用到它我们需要避免它。现在我们用这个数据源创建了一个provider，然后检测调用那个方法之后的结果是否为null：
+
+```kotlin
+val provider = ForecastProvider(listOf(ds))
+assertNotNull(provider.requestForecast(0))
+```
+
+这是完整的测试函数：
+
+```kotlin
+@Test fun testDataSourceReturnsValue() {
+    val ds = mock(ForecastDataSource::class.java)
+    `when`(ds.requestDayForecast(0)).then {
+           Forecast(0, 0, "desc", 20, 0, "url")
+    }
+    
+	val provider = ForecastProvider(listOf(ds))
+	assertNotNull(provider.requestForecast(0))
+}
+```
+
+如果你运行它，你将会看见它会出错。多亏这个测试，我们在自己的代码中发现了某些错误。测试失败是因为`ForecastProvider`在使用之前正在它的`companion object`中初始化。我们可以通过构造函数的方式在`ForecastProvider`中增加一些数据源，这个静态的List就永远不会被使用，所以它应该是使用`lazy`加载：
+
+```kotlin
+companion object {
+	val DAY_IN_MILLIS = 1000 * 60 * 60 * 24
+    val SOURCES by lazy { listOf(ForecastDb(), ForecastServer()) }
+}
+```
+
+如果你现在再次去运行，你会发现现在会通过所有的测试。
+我们也可以测试一些比如当数据源返回null的时候，它会便利下一个数据源来得到结果：
+
+```kotlin
+@Test fun emptyDatabaseReturnsServerValue() {
+    val db = mock(ForecastDataSource::class.java)
+    val server = mock(ForecastDataSource::class.java)
+    `when`(server.requestForecastByZipCode(
+            any(Long::class.java), any(Long::class.java)))
+            .then {
+                ForecastList(0, "city", "country", listOf())
+    val provider = ForecastProvider(listOf(db, server))
+    assertNotNull(provider.requestByZipCode(0, 0))
+}
+```
+
+如你所见，通过使用参数的默认值这种简单的依赖倒置足够让我们实现一些简单的`unit tests`。对于这个provider还有很多我们可以测试的东西，但是这个例子足够让我们学会使用`unit testing`工具了。
+
+[Robolectric]: http://robolectric.org/
+# Instrumentation tests
+
+`Instrumentation tests`有一点不同。它们通常被使用在UI交互上，我们需要一个应用程序实例跑的同时执行测试。达到这个，我们就需要在设备上部署并运行。
+
+这类的测试必须要放在`androidTest`文件夹中，我们必须要修改`Build Variants`区域的`Test Artifact`为`Android Instrumentation Tests`。实现instrumentation的官方库是[Espresso]，它通过`Actions`、`filter`以及检测结果的`ViewMatchers`和`Matchers`可以帮助我们更简单地使用。
+
+配置比之前更加难一点。我们需要下载额外的库和`Gradle`的配置。好事是Kotlin的测试不需要添加额外的东西，所以如果你已经知道怎么去配置`Espresso`，它将对你来说是很简单的。
+
+首先，在`defaultConfig`中指定`test runner`：
+
+```groovy
+defaultConfig {
+    ...
+    testInstrumentationRunner "android.support.test.runner.AndroidJUnitRunner"
+}
+```
+
+当你处理完该runner，然后增加其它的依赖，这次是用`androidTestCompile`。这种方式，这些库只会再编译运行`instrumentation tests`的时候才被增加：
+
+```groovy
+dependencies {
+    ...
+    androidTestCompile "com.android.support:support-annotations:$support_version"
+    androidTestCompile "com.android.support.test:runner:0.4.1"
+    androidTestCompile "com.android.support.test:rules:0.4.1"
+    androidTestCompile "com.android.support.test.espresso:espresso-core:2.2.1"
+    androidTestCompile ("com.android.support.test.espresso:espresso-contrib:2.2.1"){
+	    exclude group: 'com.android.support', module: 'appcompat'
+		exclude group: 'com.android.support', module: 'support-v4'
+		exclude module: 'recyclerview-v7'
+}
+```
+
+我不想花大量的时间去讲这些，但是这里有为什么需要这些库的简短原因：
+
+- `support-annotations`：其它库中需要使用到。
+- `runner`：这是`test runner`，就是我们再`defaultConfig`中指定的那个。
+- `rules`：包括一些测试inflate启动activity的规则。我们将会在我们的例子中使用这些规则。
+- `espresso-core`：`Espresso`的基本实现，它让`instrument tests`更加容易。
+- `espresso-contrib`：它增加了其它额外的功能，比如支持`RecyclerView`测试。我们不得不排除掉一些它的依赖，因为我们已经在这个项目中使用到了，否则测试会出错。
+
+我们现在来创建一个简单的例子。测试将会点击forecast列表的第一行，然后它会判断是否能找到一个id为`R.id.weatherDescription`的view。这个view是在`DetailActivity`中的，这表示我们在测试在RecyclerView里面点击后是否可以成功地导航到详情页面。
+
+```kotlin
+class SimpleInstrumentationTest {
+
+	@get:Rule
+    val activityRule = ActivityTestRule(MainActivity::class.java)
+    
+    ...
+}
+```
+
+首先我们需要指定它运行时使用`AndroidJUnit4`。然后，创建一个activity规则，它会实例化一个测试需要的activity。在Java中，你可以使用`@Rule`。但是如你所知，字段和属性是不一样的，所以如果你像那样去使用的话，执行会失败因为访问属性中的字段是不是public的。你需要加注解的是在getter上面。Kotlin允许指定`get`或者`set`在Rule的名字前面。在这个例子中，只要些`@get:Rule`。
+
+之后，我们已经准备好创建第一个测试了：
+
+```kotlin
+@Test fun itemClick_navigatesToDetail() {
+    onView(withId(R.id.forecastList)).perform(
+            RecyclerViewActions
+                .actionOnItemAtPosition<RecyclerView.ViewHolder>(0, click()))
+    onView(withId(R.id.weatherDescription))
+           .check(matches(isAssignableFrom(TextView::class.java)))
+}
+```
+
+函数加上了`@Test`注解，这根我们使用`unit test`的方式一样。我们可以开始在测试体中使用`Espresso`。它首先在`RecyclerView`的第一个position中执行了一个点击。然后它检测是否可以找到一个指定id的view且这个view是一个`TextView`。
+
+要运行这个测试，点击顶部的`Run configurations`下拉选择`Edit Configurations...`按下`+`图标，选择`Android Tests`，然后选择`app`模块。现在，在`target device`中选择你喜欢的`target`。点击`OK`然后运行。你应该可以看到App是怎样在你的设备中开始的，它会测试第一个position，打开详情页面然后再次关闭app。
+
+现在我们要做一个更加复杂一点的事情。测试会从toolbar众打开一个溢出菜单，点击`settings`栏，改变城市的`code`，然后检测toolbar的标题是否改变成了对应的标题。
+
+```kotlin
+@Test fun modifyZipCode_changesToolbarTitle() {
+	openActionBarOverflowOrOptionsMenu(activityRule.activity)
+	onView(withText(R.string.settings)).perform(click())
+	onView(withId(R.id.cityCode)).perform(replaceText("28830"))
+	pressBack()
+	onView(isAssignableFrom(Toolbar::class.java))
+	        .check(matches(
+	            withToolbarTitle(`is`("San Fernando de Henares (ES)"))))
+}
+```
+
+这个测试实际做的事情：
+
+- 它首先使用`openActionBarOverflowOrOptionsMenu`打开溢出菜单。
+- 然后它根据`Settings`文本查找一个view，然后点击这个它。
+- 之后，设置界面就会被打开，所以它会查找一个`EditText`并且替换成一个新的`code`。
+- 它会点击返回按钮。它会把新的值保存在preferences中，然后关闭Activity。
+- 因为`MainActivity`的`onResume`会调用，请求会再调用一次。这时它会获取到新城市的forecast。
+- 最后一行将会检测Toolbar我们看到的title是否是新的城市的title。
+
+这不是一个toolbar的title的默认匹配器，但是`Espresso`是很容易扩展的，所以我们可以创建一个新的matcher来实现检测：
+
+```kotlin
+private fun withToolbarTitle(textMatcher: Matcher<CharSequence>): Matcher<Any> =
+        object : BoundedMatcher<Any, Toolbar>(Toolbar::class.java) {
+
+	override fun matchesSafely(toolbar: Toolbar): Boolean {
+		return textMatcher.matches(toolbar.title)
+	}
+
+	override fun describeTo(description: Description) {
+		description.appendText("with toolbar title: ")
+		textMatcher.describeTo(description)
+	}                
+}
+```
+
+`matchSafely`函数是我们检测的地方，而`describeTo`函数为matcher增加了一些新的信息。
+
+这章特别有趣，因为我们看到了在Kotlin中怎么样去完美和谐地整合测试，它们可以没有任何问题地整合测试。查看代码然后你自己运行一下吧。
+
+
+[Espresso]: https://google.github.io/android-testing-support-library/
+# 其它的概念
+
+通过本书，我们讲解了Koltin语言中大部分的概念。但是其中某一些我们在这个App中没有使用到，我会把它们放到这章中来。这章中，我们回顾一些无关的内容，以便你在你自己的Kotlin项目中可以使用到它们。
+# 内部类
+
+在Java中，我们可以在类的里面再定义类。如果它是一个通常的类，它不能去访问外部类的成员（就如Java中的static）：
+
+```kotlin
+class Outer {
+  private val bar: Int = 1
+	class Nested {
+		fun foo() = 2
+	}
+}
+
+val demo = Outer.Nested().foo() // == 2
+```
+
+如果需要去访问外部类的成员，我们需要用`inner`声明这个类：
+
+```kotlin
+class Outer {
+	private val bar: Int = 1
+	inner class Inner{
+		fun foo() = bar
+	}
+}
+
+val demo = Outer().Inner().foo() // == 1
+```
+# 枚举
+
+Kotlin也提供了枚举（`enums`）的实现：
+
+```kotlin
+enum class Day {
+    SUNDAY, MONDAY, TUESDAY, WEDNESDAY,
+    THURSDAY, FRIDAY, SATURDAY
+}
+```
+
+枚举可以带有参数：
+
+```kotlin
+enum class Icon(val res: Int) {
+	UP(R.drawable.ic_up),
+	SEARCH(R.drawable.ic_search),
+	CAST(R.drawable.ic_cast)
+}
+
+val searchIconRes = Icon.SEARCH.res
+```
+
+枚举可以通过`String`匹配名字来获取，我们也可以获取包含所有枚举的`Array`，所以我们可以遍历它。
+
+```kotlin
+val search: Icon = Icon.valueOf("SEARCH")
+val iconList: Array<Icon> = Icon.values()
+```
+
+而且每一个枚举都有一些函数来获取它的名字、声明的位置：
+
+```kotlin
+val searchName: String = Icon.SEARCH.name()
+val searchPosition: Int = Icon.SEARCH.ordinal()
+```
+
+枚举根据它的顺序实现了 `Comparable`接口，所以可以很方便地把它们进行排序。
+
+# 密封（Sealed）类
+
+密封类用来限制类的继承关系，这意味着密封类的子类数量是固定的。看起来就像是枚举那样，当你想在一个密封类的子类中寻找一个指定的类的时候，你可以事先知道所有的子类。不同之处在于枚举的实例是唯一的，而密封类可以有很多实例，它们可以有不同的状态。
+
+我们可以实现，比如类似Scala中的`Option`类：这种类型可以防止null的使用，当对象包含一个值时返回`Some`类，当对象为空时则返回`None`：
+
+```kotlin
+sealed class Option<out T> {
+    class Some<out T> : Option<T>()
+    object None : Option<Nothing>()
+}
+```
+
+有一件关于密封类很不错的事情是当我们使用`when`表达式时，我们可以匹配所有选项而不使用`else`分支：
+
+```kotlin
+val result = when (option) {
+    is Option.Some<*> -> "Contains a value"
+    is Option.None -> "Empty"
+}
+```
+
+
+# 异常（Exceptions）
+
+在Kotlin中，所有的`Exception`都是实现了`Throwable`，含有一个`message`且未经检查。这表示我们不会强迫我们在任何地方使用`try/catch`。这与Java中不太一样，比如在抛出`IOException`的方法，我们需要使用`try-catch`包围代码块。通过检查exception来处理显示并不是一个好的方法。像[Bruce Eckel]、[Rod Waldhoff]或[Anders Hejlsberg]等人可以给你关于这个更好的观点。
+
+抛出异常的方式与Java很类似：
+
+```kotlin
+throw MyException("Exception message")
+```
+
+`try`表达式也是相同的：
+
+```kotlin
+try{
+	// 一些代码
+}
+catch (e: SomeException) {
+	// 处理
+}
+finally {
+	// 可选的finally块
+}
+```
+
+在Kotlin中，`throw`和`try`都是表达式，这意味着它们可以被赋值给一个变量。这个在处理一些边界问题的时候确实非常有用：
+
+```kotlin
+val s = when(x){
+	is Int -> "Int instance"
+	is String -> "String instance"
+	else -> throw UnsupportedOperationException("Not valid type")
+}
+```
+
+或者
+
+```kotlin
+val s = try { x as String } catch(e: ClassCastException) { null }
+```
+
+[Bruce Eckel]: http://www.mindview.net/Etc/Discussions/CheckedExceptions
+[Rod Waldhoff]: http://radio-weblogs.com/0122027/stories/2003/04/01/JavasCheckedExceptionsWereAMistake.html
+[Anders Hejlsberg]: http://www.artima.com/intv/handcuffs.html
+# 结尾
+
+感谢你阅读本书。通过本书，我们通过来实现一个Android App的例子来学习Kotlin。这个天气预报的App是一个不错的例子，它实现了大部分App需要的一些基本特性：一个主/从UI，通过API通信，数据库存储，shared preferences……
+
+用这个方式不错的地方是你使用它们的使用学习到了大部分的Kotlin中重要的概念。我觉得新的语言在真正实践的时候更加容易被掌握。这是我主要的目标，参考书的确是一个解决一些标准问题的很好的工具，但是我们从头到尾阅读起来是很困难的。而且作为一些例子也是脱离于一个大的上下文环境，很难理解这些特性可以解决哪类问题。
+
+而且实际上本书的其它的目标：展示给你看在Android中你会遇到的实际问题，并且使用Kotlin怎么去解决它们。一些Android开发者在处理异步、数据库或者处理Activity中非常冗长的listener时发现了很多的问题。通过作为一个例子的真正的App，我们遇到了很多问题并且学习到了新的语言和库的特性。
+
+我希望这些目标已经达到了，并且我真的希望你不仅仅是在学习Kotlin，而且是在本书的阅读中得到享受。我被说服了，Kotlin对于Android开发者而言是目前最好的Java的替代者，我们会在接下来的时间中看到它的进步。当它事情发生时你将会是第一个上船的人，而且在你的圈子中你将会处于一个完美的参考人的位置。
+
+本书已经结束了，但是这不是意味着它就死亡了。我将会一直根据最新版本保持更新（至少到1.0），根据你的留言和建议来检查并优化它。有什么想法可以在任何时候联系我，告诉我你的想法、你发现的错误、不够清晰的概念或者任何你顾虑的东西。
+
+这几个月再写这本书的过程中经历了一个不可思议的旅行。我也学习到了很多，所以感谢你们的帮助让`Kotlin for Android Developers`这本书成为现实。
+
+给你最好的祝福，
+
+Antonio Leiva
+
+- 网站：[antonioleiva]
+- 邮箱：[contact@antonioleiva.com]
+- Twitter：[@lime_cl]
+- Google+：[+AntonioLeivaGordillo]
+
+[antonioleiva]: http://antonioleiva.com
+[contact@antonioleiva.com]: mailto:contact@antonioleiva.com
+[@lime_cl]: http://twitter.com/lime_cl
+[+AntonioLeivaGordillo]: http://plus.google.com/+AntonioLeivaGordillo
 
 
 
