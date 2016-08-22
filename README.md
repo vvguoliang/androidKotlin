@@ -1,4 +1,3 @@
-# 这是大神翻译出来的，希望有人能看到并且灵活利用
 # 《Kotlin for android developers》中文版翻译
 
 > 错别字、病句、翻译错误等问题可以提issues。请说明错误原因。
