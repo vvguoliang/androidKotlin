@@ -26,7 +26,7 @@ MERGED from [com.android.support:support-v4:23.1.1] /Users/vvguoliang/androidKot
 	android:icon
 		ADDED from /Users/vvguoliang/androidKotlin/MyKotlin/app/src/main/AndroidManifest.xml:7:9-43
 	android:theme
-		ADDED from /Users/vvguoliang/androidKotlin/MyKotlin/app/src/main/AndroidManifest.xml:10:9-40
+		ADDED from /Users/vvguoliang/androidKotlin/MyKotlin/app/src/main/AndroidManifest.xml:10:9-70
 activity#com.example.mykotlin.MainActivity
 ADDED from /Users/vvguoliang/androidKotlin/MyKotlin/app/src/main/AndroidManifest.xml:11:9-17:20
 	android:name

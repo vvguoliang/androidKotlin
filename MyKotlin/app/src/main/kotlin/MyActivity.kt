@@ -5,14 +5,15 @@ package com.example.mykotlin;
 
 import android.content.Intent
 import android.os.Bundle
+import android.view.View
 import kotlinx.android.synthetic.main.myactivity.*
 
 class MyActivity : BastActivity(){
-    override fun initView() {
+    fun initView() {
         throw UnsupportedOperationException("not implemented") //To change body of created functions use File | Settings | File Templates.
     }
 
-    override fun findViewById() {
+    override fun findViewById(id: Int): View? {
         throw UnsupportedOperationException("not implemented") //To change body of created functions use File | Settings | File Templates.
     }
 

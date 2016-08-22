@@ -1,3 +1,0 @@
-CHANGED,/Users/vvguoliang/androidKotlin/MyKotlin/app/build/intermediates/transforms/instantRun/debug/folders/4000/5/enhanced/com/example/mykotlin/MainActivity$onCreate$1$override.class
-CHANGED,/Users/vvguoliang/androidKotlin/MyKotlin/app/build/intermediates/transforms/instantRun/debug/folders/4000/5/enhanced/com/android/tools/fd/runtime/AppPatchesLoaderImpl.class
-CHANGED,/Users/vvguoliang/androidKotlin/MyKotlin/app/build/intermediates/transforms/instantRun/debug/folders/4000/5/enhanced/com/example/mykotlin/MainActivity$override.class

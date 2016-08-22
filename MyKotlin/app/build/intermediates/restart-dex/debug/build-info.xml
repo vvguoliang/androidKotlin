@@ -4,27 +4,27 @@
     api-level="19"
     density="xhdpi"
     format="7"
-    timestamp="52595731140500"
+    timestamp="246670994367689"
     token="4048831339064600944" >
 
     <task
         name="javac"
-        duration="0" />
+        duration="137" />
     <task
         name="instant-run-dex"
         duration="0" />
     <task
         name="instant-run-transform"
-        duration="28" />
+        duration="125" />
     <task
         name="verifier"
-        duration="3" />
+        duration="17" />
 
     <artifact
         location="/Users/vvguoliang/androidKotlin/MyKotlin/app/build/outputs/apk/app-debug.apk"
         type="MAIN" />
 
-    <build timestamp="52595731140500" >
+    <build timestamp="246670994367689" >
         <artifact
             location="/Users/vvguoliang/androidKotlin/MyKotlin/app/build/outputs/apk/app-debug.apk"
             type="MAIN" />

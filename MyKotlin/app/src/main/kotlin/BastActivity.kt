@@ -85,16 +85,6 @@ abstract class BastActivity : FragmentActivity() {
     }
 
     /**
-     * 绑定控件id
-     */
-    protected abstract fun findViewById()
-
-    /**
-     * 初始化控件
-     */
-    protected abstract fun initView()
-
-    /**
      * 通过类名启动Activity
 
      * @param pClass
