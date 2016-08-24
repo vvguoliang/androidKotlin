@@ -18,14 +18,18 @@ import java.util.*
 /**
  * Created by vvguoliang on 16/8/17.
  */
+/**
+ * 从DrawerKotlin 类开始就要做详细的做法
+ */
 class DrawerKotlin : BaseActivity() {
 
-    var mPlanetTitles = ArrayList<String>()
-    var mTitle: CharSequence? = null
+    var mPlanetTitles = ArrayList<String>()  // 定义变量 mPlanetTitles  这个表示list集合
+    var mTitle: CharSequence? = null    //定义变量 mTitle 类型为CharSequence  ？表示可能为null  如果为null会把这个类转换不能为null的数值 这是kotlin的空安全
     var mDrawerTitle: CharSequence? = null
     var mDrawerToggle: ActionBarDrawerToggle? = null
     var adapter: AdapterDrawer? = null
     var inti: Int? = 0
+    /*   定义  数组*/
     private var iString = arrayOf("入门\nGetting Srtarted", "基础\nBasics", "类与对象\nClass and Object", "功能与Lambda表达式\nFunctions and Lambda", "其他\nOther", "参考\nReference", "互操作\nInterop", "工具\nTools")
 
     private var iString1 = arrayOf("基本语言\nBasic Syntax", "成语\nIdioms", "编码约定\nCoding Conventions")
@@ -40,7 +44,7 @@ class DrawerKotlin : BaseActivity() {
 
         //默认显示第一列内容
         if (savedInstanceState == null)
-            selectItem(0,0)
+            selectItem(0, 0)
     }
 
     fun initView() {
@@ -52,10 +56,11 @@ class DrawerKotlin : BaseActivity() {
         mPlanetTitles.getData()
         adapter = AdapterDrawer(mPlanetTitles, this@DrawerKotlin)
         drawer_list.adapter = adapter
+        /*这里是点击时间*/
         drawer_list.setOnItemClickListener { adapterView, view, i, l ->
 //            selectItem(i)
             inti = i
-            downPopwindow(i)
+            downPopwindow(i)  //POP调用
         }
 
     }
@@ -117,7 +122,10 @@ class DrawerKotlin : BaseActivity() {
         }
     }
 
-    fun selectItem(position: Int , ini: Int) {
+    /**
+     * 这里定义每个Fragment 跳转 不同内容
+     */
+    fun selectItem(position: Int, ini: Int) {
         //关闭drawer
         drawer_act.closeDrawer(GravityCompat.START)
         try {
@@ -125,12 +133,12 @@ class DrawerKotlin : BaseActivity() {
         } catch (e: InterruptedException) {
             e.printStackTrace()
         }
-        val fragment = DrawerFragment()
+        val fragment = DrawerFragment()  // 类的定义  下面是返回类的数据
         val args = Bundle()
         args.putInt("ARG_PLANET_NUMBER", position)
-        args.putInt("ARG_PLANET_NUMBER_LIST" , ini)
+        args.putInt("ARG_PLANET_NUMBER_LIST", ini)
         fragment.setArguments(args)
-        var fragmentManager = supportFragmentManager
+        var fragmentManager = supportFragmentManager   // 这里用supportFragmentManager  这里要记住
         fragmentManager.beginTransaction().replace(R.id.drawer_frame, fragment).commit()
     }
 
@@ -173,7 +181,9 @@ class DrawerKotlin : BaseActivity() {
         popWindow!!.setBackgroundDrawable(BitmapDrawable())
         popWindow!!.isOutsideTouchable = true
 
-
+        /**
+         * 这里表示SWHIE 转换  when 也表示 快捷方式
+         */
         when (int) {
             0 -> iString1 = arrayOf("基本语言\nBasic Syntax", "成语\nIdioms", "编码约定\nCoding Conventions")
             1 -> iString1 = arrayOf("基本类型\nBasic Types", "包\nPackages", "控制流\nControl Flow", "退货和活跃\nReturns and Jumps")
@@ -193,7 +203,7 @@ class DrawerKotlin : BaseActivity() {
         drawer_list.adapter = adapter
 
         drawer_list.setOnItemClickListener { adapterView, view, i, l ->
-            selectItem(i , int)
+            selectItem(i, int)
         }
         popWindow!!.showAsDropDown(drawer_list)
     }

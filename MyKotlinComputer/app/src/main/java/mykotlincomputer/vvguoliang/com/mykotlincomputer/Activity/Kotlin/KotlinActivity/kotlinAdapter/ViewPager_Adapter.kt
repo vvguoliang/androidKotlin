@@ -9,6 +9,16 @@ import java.util.*
 /**
  * Created by vvguoliang on 16/8/18.
  */
+
+/**
+ * 这里是Viewpager 适配器
+ *
+ *   所有Fragment 只要有左右滑动 都会走这里
+ *   这里可以在类上面直接定义 var fm: FragmentManager, val listfrage: ArrayList<Fragment>  变量  val 表示静态 方法
+ *
+ *  重点在于ar fm: FragmentManager  这个变量  在放置的时候 会出现错误 我在每个Fragment 都标记了
+ */
+
 class ViewPager_Adapter(var fm: FragmentManager, val listfrage: ArrayList<Fragment>) : FragmentPagerAdapter(fm) {
 
     var mChildCount: Int = 0

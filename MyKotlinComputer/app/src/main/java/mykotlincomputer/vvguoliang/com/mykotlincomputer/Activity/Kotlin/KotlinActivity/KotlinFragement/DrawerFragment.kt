@@ -11,6 +11,9 @@ import mykotlincomputer.vvguoliang.com.mykotlincomputer.R
 /**
  * Created by vvguoliang on 16/8/17.
  */
+/**
+ * 所有Fragment 跳转不同Fragment类
+ */
 class DrawerFragment : BaseFragemt() {
 
     override fun onCreateView(inflater: LayoutInflater?, container: ViewGroup?, savedInstanceState: Bundle?): View {
@@ -18,18 +21,12 @@ class DrawerFragment : BaseFragemt() {
         val rootView = inflater?.inflate(R.layout.fra_drawer, container, false)
         val i = arguments.getInt("ARG_PLANET_NUMBER")
         val i1 = arguments.getInt("ARG_PLANET_NUMBER_LIST")
-//        val planet = resources.getStringArray(R.array.planets_array)[i]
 
-//        //显示图片
-//        val imgId = resources.getIdentifier(planet.toLowerCase(Locale.getDefault()), "drawable", activity.packageName)
-//        (rootView.findViewById(R.id.imageView) as ImageView).setImageResource(imgId)
-//        activity.title = planet
-
-        var fragmentManager = getFragmentManager()
+        var fragmentManager = getFragmentManager()  // 这里用getFragmentManager  来代表  这里是重点
         //用wehen 代表
         when (i1) {
             0 -> {
-                if (i == 0) {
+                if (i == 0) {  //第一个类属于分别跳转
                     var fragment = FragmentBasic_Syntax()
                     fragmentManager.beginTransaction().add(R.id.drawer_frame, fragment).commit()
                 } else if (i == 1) {
@@ -41,7 +38,7 @@ class DrawerFragment : BaseFragemt() {
                 }
             }
             1 -> {
-                if (i == 0) {
+                if (i == 0) {  //从这里就用同一个Fragment 来做跳转
                     var fragment = FragmentBasics(i)
                     fragmentManager.beginTransaction().add(R.id.drawer_frame, fragment).commit()
                 } else if (i == 1) {
@@ -57,7 +54,7 @@ class DrawerFragment : BaseFragemt() {
             }
 
             2 -> {
-                if (i == 0) {
+                if (i == 0) { // 这里也是
                     var fragment = FragmentClassObject(i)
                     fragmentManager.beginTransaction().add(R.id.drawer_frame, fragment).commit()
                 } else if (i == 1) {
@@ -84,7 +81,8 @@ class DrawerFragment : BaseFragemt() {
                 } else if (i == 8) {
                     var fragment = FragmentClassObject(i)
                     fragmentManager.beginTransaction().add(R.id.drawer_frame, fragment).commit()
-                } else if (i == 9) {   var fragment = FragmentClassObject(i)
+                } else if (i == 9) {
+                    var fragment = FragmentClassObject(i)
                     fragmentManager.beginTransaction().add(R.id.drawer_frame, fragment).commit()
                 } else if (i == 10) {
                     var fragment = FragmentClassObject(i)
@@ -96,7 +94,7 @@ class DrawerFragment : BaseFragemt() {
             }
 
             3 -> {
-                if (i == 0) {
+                if (i == 0) {  //如果想做操作 你可以在这里实现
                     Toast.makeText(activity, "===================" + i1 + "===="+i, Toast.LENGTH_SHORT).show()
                 } else if (i == 1) {
                     Toast.makeText(activity, "===================" + i1 + "===="+i, Toast.LENGTH_SHORT).show()

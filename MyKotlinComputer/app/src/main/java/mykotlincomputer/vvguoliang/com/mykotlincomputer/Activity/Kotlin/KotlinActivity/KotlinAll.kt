@@ -9,6 +9,10 @@ import mykotlincomputer.vvguoliang.com.mykotlincomputer.R
 /**
  * Created by vvguoliang on 16/8/17.
  */
+/**
+ * KotlinALL 也是做了跳转
+ *  写的不全，可以自己试试跳转怎么样？
+ */
 class KotlinAll : BaseActivity(){
 
     override fun onCreate(savedInstanceState: Bundle?) {

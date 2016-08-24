@@ -11,6 +11,10 @@ import java.util.*
 /**
  * Created by vvguoliang on 16/8/17.
  */
+
+/**
+ * 这里是侧滑的适配器 非常简单
+ */
 class AdapterDrawer(val list: ArrayList<String>, val content: Context) : BaseAdapter() {
 
     override fun getCount(): Int {

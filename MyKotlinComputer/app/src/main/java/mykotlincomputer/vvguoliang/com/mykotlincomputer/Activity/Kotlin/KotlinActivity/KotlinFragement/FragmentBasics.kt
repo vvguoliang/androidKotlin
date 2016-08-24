@@ -15,6 +15,7 @@ import java.util.*
 
 class FragmentBasics(var i: Int) : BaseFragemt() {
 
+
     var viewpager: ViewPager_Adapter? = null
     var listfra: List<Fragment>? = null
     override fun onCreateView(inflater: LayoutInflater?, container: ViewGroup?, savedInstanceState: Bundle?): View {
